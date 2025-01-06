@@ -1,5 +1,6 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useCallback } from "react";
 import { useUser } from "./use-user";
+import { useToast } from "./use-toast";
 
 type WebSocketMessage = {
   type: string;
@@ -8,54 +9,100 @@ type WebSocketMessage = {
 
 export function useWebSocket() {
   const { user } = useUser();
+  const { toast } = useToast();
   const wsRef = useRef<WebSocket | null>(null);
   const messageHandlersRef = useRef<((message: WebSocketMessage) => void)[]>([]);
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout>();
 
-  useEffect(() => {
-    if (!user) return;
+  const connect = useCallback(() => {
+    if (!user || wsRef.current?.readyState === WebSocket.OPEN) return;
 
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
 
     ws.onopen = () => {
       ws.send(JSON.stringify({ type: "auth", userId: user.id }));
+      // Clear reconnect timeout if connection successful
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = undefined;
+      }
     };
 
     ws.onmessage = (event) => {
-      const message = JSON.parse(event.data);
-      messageHandlersRef.current.forEach((handler) => handler(message));
+      try {
+        const message = JSON.parse(event.data);
+        messageHandlersRef.current.forEach((handler) => handler(message));
+      } catch (error) {
+        console.error("WebSocket message parsing error:", error);
+      }
     };
 
     ws.onclose = () => {
-      // Attempt to reconnect after 3 seconds
-      setTimeout(() => {
-        if (document.visibilityState === "visible") {
+      // Only attempt to reconnect if we still have a user and the page is visible
+      if (user && document.visibilityState === "visible") {
+        // Exponential backoff for reconnection attempts
+        reconnectTimeoutRef.current = setTimeout(() => {
           wsRef.current = null;
-        }
-      }, 3000);
+          connect();
+        }, 3000);
+      }
+    };
+
+    ws.onerror = () => {
+      toast({
+        title: "Connection Error",
+        description: "Lost connection to chat server. Attempting to reconnect...",
+        variant: "destructive",
+      });
     };
 
     wsRef.current = ws;
+  }, [user, toast]);
+
+  useEffect(() => {
+    connect();
+
+    // Handle visibility changes to reconnect when tab becomes visible
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible" && user && (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN)) {
+        connect();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
-      ws.close();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
     };
-  }, [user]);
+  }, [user, connect]);
 
-  const sendMessage = (message: WebSocketMessage) => {
+  const sendMessage = useCallback((message: WebSocketMessage) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify(message));
+    } else {
+      toast({
+        title: "Connection Error",
+        description: "Unable to send message. Please try again.",
+        variant: "destructive",
+      });
     }
-  };
+  }, [toast]);
 
-  const addMessageHandler = (handler: (message: WebSocketMessage) => void) => {
+  const addMessageHandler = useCallback((handler: (message: WebSocketMessage) => void) => {
     messageHandlersRef.current.push(handler);
     return () => {
       messageHandlersRef.current = messageHandlersRef.current.filter(
         (h) => h !== handler
       );
     };
-  };
+  }, []);
 
   return {
     sendMessage,
