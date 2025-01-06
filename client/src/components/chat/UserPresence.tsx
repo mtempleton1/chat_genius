@@ -31,7 +31,7 @@ export default function UserPresence({ user }: UserPresenceProps) {
       <DropdownMenuTrigger className="focus:outline-none">
         <div className="flex items-center gap-2">
           <Avatar>
-            <AvatarImage src={user.avatar} alt={user.username} />
+            <AvatarImage src={user.avatar ?? undefined} alt={user.username} />
             <AvatarFallback>{user.username[0].toUpperCase()}</AvatarFallback>
           </Avatar>
           <div className="text-sm">
@@ -42,7 +42,7 @@ export default function UserPresence({ user }: UserPresenceProps) {
           </div>
         </div>
       </DropdownMenuTrigger>
-      
+
       <DropdownMenuContent align="end">
         <DropdownMenuItem onClick={() => logout()}>
           Log out
