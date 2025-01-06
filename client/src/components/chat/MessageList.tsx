@@ -4,17 +4,10 @@ import { useWebSocket } from "@/hooks/use-websocket";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { MessageSquare } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
-import type { Message, User, Reaction } from "@db/schema";
-import MessageInput from "@/components/chat/MessageInput";
-import FileUpload from "@/components/chat/FileUpload";
-import EmojiPicker from "@/components/chat/EmojiPicker";
-
-interface MessageWithUser extends Message {
-  user: User;
-  reactions?: Reaction[];
-}
+import { MessageSquare, Smile } from "lucide-react";
+import MessageInput from "./MessageInput";
+import FileUpload from "./FileUpload";
+import type { Message, User } from "@db/schema";
 
 type MessageListProps = {
   channelId: number | null;
@@ -63,7 +56,7 @@ export default function MessageList({ channelId, onThreadSelect }: MessageListPr
           {messages?.map((message) => (
             <MessageItem
               key={message.id}
-              message={message as MessageWithUser}
+              message={message}
               onThreadSelect={onThreadSelect}
               onReactionAdd={(emoji) => addReaction({ messageId: message.id, emoji })}
             />
@@ -82,32 +75,30 @@ export default function MessageList({ channelId, onThreadSelect }: MessageListPr
 }
 
 type MessageItemProps = {
-  message: MessageWithUser;
+  message: Message & { user: User };
   onThreadSelect: (messageId: number) => void;
   onReactionAdd: (emoji: string) => void;
 };
 
 function MessageItem({ message, onThreadSelect, onReactionAdd }: MessageItemProps) {
-  const createdAt = message.createdAt ? new Date(message.createdAt) : new Date();
-
   return (
     <div className="flex gap-3 group">
       <Avatar>
-        <AvatarImage src={message.user.avatar ?? undefined} alt={message.user.username} />
+        <AvatarImage src={message.user.avatar} alt={message.user.username} />
         <AvatarFallback>{message.user.username[0].toUpperCase()}</AvatarFallback>
       </Avatar>
-
+      
       <div className="flex-1">
         <div className="flex items-center gap-2">
           <span className="font-semibold">{message.user.username}</span>
           <span className="text-xs text-muted-foreground">
-            {createdAt.toLocaleTimeString()}
+            {new Date(message.createdAt).toLocaleTimeString()}
           </span>
         </div>
-
+        
         <p className="mt-1">{message.content}</p>
-
-        {message.attachments && message.attachments.length > 0 && (
+        
+        {message.attachments?.length > 0 && (
           <div className="mt-2 flex gap-2">
             {message.attachments.map((attachment, i) => (
               <a
@@ -122,29 +113,7 @@ function MessageItem({ message, onThreadSelect, onReactionAdd }: MessageItemProp
             ))}
           </div>
         )}
-
-        {/* Reactions display */}
-        <div className="mt-2 flex flex-wrap gap-1">
-          <AnimatePresence>
-            {message.reactions?.map((reaction) => (
-              <motion.div
-                key={reaction.id}
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                exit={{ scale: 0 }}
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent text-accent-foreground text-sm"
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.95 }}
-              >
-                <span>{reaction.emoji}</span>
-                <span className="text-xs">
-                  {message.reactions?.filter(r => r.emoji === reaction.emoji).length}
-                </span>
-              </motion.div>
-            ))}
-          </AnimatePresence>
-        </div>
-
+        
         <div className="mt-2 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
           <Button
             variant="ghost"
@@ -154,11 +123,15 @@ function MessageItem({ message, onThreadSelect, onReactionAdd }: MessageItemProp
             <MessageSquare className="h-4 w-4 mr-1" />
             Reply
           </Button>
-
-          <EmojiPicker
-            onEmojiSelect={(emoji) => onReactionAdd(emoji)}
-            className="h-8"
-          />
+          
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onReactionAdd("👍")}
+          >
+            <Smile className="h-4 w-4 mr-1" />
+            React
+          </Button>
         </div>
       </div>
     </div>

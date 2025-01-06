@@ -6,19 +6,6 @@ import MessageInput from "./MessageInput";
 import FileUpload from "./FileUpload";
 import type { Message } from "@db/schema";
 
-interface MessageWithUser extends Message {
-  user: {
-    id: number;
-    username: string;
-    avatar: string | null;
-  };
-  reactions?: {
-    id: number;
-    emoji: string;
-    userId: number;
-  }[];
-}
-
 type ThreadViewProps = {
   messageId: number;
   onClose: () => void;
@@ -27,10 +14,10 @@ type ThreadViewProps = {
 export default function ThreadView({ messageId, onClose }: ThreadViewProps) {
   const { messages, sendMessage } = useMessages(messageId);
 
-  const parentMessage = messages?.[0] as MessageWithUser | undefined;
+  const parentMessage = messages?.[0];
   if (!parentMessage) return null;
 
-  const replies = messages?.filter((m) => m.id !== messageId) as MessageWithUser[];
+  const replies = messages?.filter((m) => m.id !== messageId);
 
   return (
     <div className="h-full flex flex-col border-l">
@@ -55,7 +42,7 @@ export default function ThreadView({ messageId, onClose }: ThreadViewProps) {
           onSendMessage={(content) =>
             sendMessage(content)
           }
-          fileUploadComponent={<FileUpload channelId={parentMessage.channelId!} />}
+          fileUploadComponent={<FileUpload channelId={parentMessage.channelId} />}
         />
       </div>
     </div>
@@ -63,23 +50,21 @@ export default function ThreadView({ messageId, onClose }: ThreadViewProps) {
 }
 
 type ThreadMessageProps = {
-  message: MessageWithUser;
+  message: Message;
   isParent?: boolean;
 };
 
 function ThreadMessage({ message, isParent }: ThreadMessageProps) {
-  const createdAt = message.createdAt ? new Date(message.createdAt) : new Date();
-
   return (
     <div className={`p-4 ${isParent ? "bg-accent rounded-lg" : ""}`}>
       <div className="flex items-center gap-2">
-        <span className="font-semibold">{message.user.username}</span>
+        <span className="font-semibold">{message.user?.username}</span>
         <span className="text-xs text-muted-foreground">
-          {createdAt.toLocaleString()}
+          {new Date(message.createdAt).toLocaleString()}
         </span>
       </div>
       <p className="mt-1">{message.content}</p>
-      {message.attachments && message.attachments.length > 0 && (
+      {message.attachments?.length > 0 && (
         <div className="mt-2 flex gap-2">
           {message.attachments.map((attachment, i) => (
             <a
