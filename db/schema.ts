@@ -61,18 +61,29 @@ export const reactions = pgTable("reactions", {
 
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
-  messages: many(messages, {
-    fields: [users.id],
-    references: [messages.userId],
+  messages: many(messages),
+  channelMembers: many(channelMembers),
+  reactions: many(reactions)
+}));
+
+export const channelsRelations = relations(channels, ({ many, one }) => ({
+  messages: many(messages),
+  members: many(channelMembers),
+  createdBy: one(users, {
+    fields: [channels.createdById],
+    references: [users.id],
+  })
+}));
+
+export const channelMembersRelations = relations(channelMembers, ({ one }) => ({
+  channel: one(channels, {
+    fields: [channelMembers.channelId],
+    references: [channels.id],
   }),
-  channelMembers: many(channelMembers, {
-    fields: [users.id],
-    references: [channelMembers.userId],
-  }),
-  reactions: many(reactions, {
-    fields: [users.id],
-    references: [reactions.userId],
-  }),
+  user: one(users, {
+    fields: [channelMembers.userId],
+    references: [users.id],
+  })
 }));
 
 export const messagesRelations = relations(messages, ({ one, many }) => ({
@@ -84,10 +95,18 @@ export const messagesRelations = relations(messages, ({ one, many }) => ({
     fields: [messages.channelId],
     references: [channels.id],
   }),
-  reactions: many(reactions, {
-    fields: [messages.id],
-    references: [reactions.messageId],
+  reactions: many(reactions)
+}));
+
+export const reactionsRelations = relations(reactions, ({ one }) => ({
+  user: one(users, {
+    fields: [reactions.userId],
+    references: [users.id],
   }),
+  message: one(messages, {
+    fields: [reactions.messageId],
+    references: [messages.id],
+  })
 }));
 
 // Schemas
