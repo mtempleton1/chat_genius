@@ -27,12 +27,12 @@ type MessageWithUser = Message & {
 export default function MessageList({ channelId, onThreadSelect }: MessageListProps) {
   const { messages, isLoading, sendMessage, addReaction } = useMessages(channelId ?? 0);
   const { addMessageHandler, sendMessage: sendWebSocketMessage } = useWebSocket();
-  const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const scrollArea = scrollAreaRef.current;
-    if (scrollArea) {
-      scrollArea.scrollTop = scrollArea.scrollHeight;
+    const scrollElement = scrollRef.current;
+    if (scrollElement) {
+      scrollElement.scrollTop = scrollElement.scrollHeight;
     }
   }, [messages]);
 
@@ -79,8 +79,8 @@ export default function MessageList({ channelId, onThreadSelect }: MessageListPr
         <h2 className="font-semibold">Channel Messages</h2>
       </div>
 
-      <div className="flex-1 overflow-hidden">
-        <ScrollArea className="h-full" viewportRef={scrollAreaRef}>
+      <div className="flex-1 overflow-hidden" ref={scrollRef}>
+        <ScrollArea className="h-full">
           <div className="p-4 space-y-4">
             {messages?.map((message) => {
               if (!message?.user) return null;
