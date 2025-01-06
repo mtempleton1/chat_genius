@@ -55,7 +55,10 @@ export const usersRelations = relations(users, ({ many }) => ({
 
 export const channelsRelations = relations(channels, ({ many, one }) => ({
   messages: many(messages),
-  members: many(channelMembers),
+  channelMembers: many(channelMembers, {
+    fields: [channels.id],
+    references: [channelMembers.channelId],
+  }),
   createdBy: one(users, {
     fields: [channels.createdById],
     references: [users.id],
