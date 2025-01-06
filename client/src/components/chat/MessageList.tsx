@@ -27,11 +27,12 @@ type MessageWithUser = Message & {
 export default function MessageList({ channelId, onThreadSelect }: MessageListProps) {
   const { messages, isLoading, sendMessage, addReaction } = useMessages(channelId ?? 0);
   const { addMessageHandler, sendMessage: sendWebSocketMessage } = useWebSocket();
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    const scrollArea = scrollAreaRef.current;
+    if (scrollArea) {
+      scrollArea.scrollTop = scrollArea.scrollHeight;
     }
   }, [messages]);
 
@@ -66,7 +67,7 @@ export default function MessageList({ channelId, onThreadSelect }: MessageListPr
 
   if (isLoading) {
     return (
-      <div className="h-full flex items-center justify-center">
+      <div className="h-full flex items-center justify-center text-muted-foreground">
         Loading messages...
       </div>
     );
@@ -74,23 +75,28 @@ export default function MessageList({ channelId, onThreadSelect }: MessageListPr
 
   return (
     <div className="h-full flex flex-col">
-      <ScrollArea ref={scrollRef} className="flex-1 p-4">
-        <div className="space-y-4">
-          {messages?.map((message) => {
-            // Skip rendering if message doesn't have required data
-            if (!message?.user) return null;
+      <div className="border-b px-4 py-2">
+        <h2 className="font-semibold">Channel Messages</h2>
+      </div>
 
-            return (
-              <MessageItem
-                key={message.id}
-                message={message as MessageWithUser}
-                onThreadSelect={onThreadSelect}
-                onReactionAdd={(emoji) => addReaction({ messageId: message.id, emoji })}
-              />
-            );
-          })}
-        </div>
-      </ScrollArea>
+      <div className="flex-1 overflow-hidden">
+        <ScrollArea className="h-full" viewportRef={scrollAreaRef}>
+          <div className="p-4 space-y-4">
+            {messages?.map((message) => {
+              if (!message?.user) return null;
+
+              return (
+                <MessageItem
+                  key={message.id}
+                  message={message as MessageWithUser}
+                  onThreadSelect={onThreadSelect}
+                  onReactionAdd={(emoji) => addReaction({ messageId: message.id, emoji })}
+                />
+              );
+            })}
+          </div>
+        </ScrollArea>
+      </div>
 
       <div className="p-4 border-t">
         <MessageInput

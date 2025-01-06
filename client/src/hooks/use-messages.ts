@@ -6,7 +6,7 @@ export function useMessages(channelId: number) {
 
   const { data: messages, isLoading } = useQuery<Message[]>({
     queryKey: ["/api/channels", channelId, "messages"],
-    enabled: !!channelId,
+    enabled: channelId > 0,
   });
 
   const sendMessage = useMutation({
