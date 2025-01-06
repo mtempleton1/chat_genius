@@ -1,4 +1,12 @@
-import { pgTable, text, serial, timestamp, boolean, integer, jsonb } from "drizzle-orm/pg-core";
+import {
+  pgTable,
+  text,
+  serial,
+  timestamp,
+  boolean,
+  integer,
+  jsonb,
+} from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { relations } from "drizzle-orm";
 
@@ -17,43 +25,28 @@ export const channels = pgTable("channels", {
   name: text("name").notNull(),
   isPrivate: boolean("is_private").default(false),
   createdAt: timestamp("created_at").defaultNow(),
-  createdById: integer("created_by_id").references(() => users.id).notNull(),
+  createdById: integer("created_by_id")
+    .references(() => users.id)
+    .notNull(),
 });
-
-export const channelsRelations = relations(channels, ({ many, one }) => ({
-  members: many(channelMembers),
-  messages: many(messages),
-  createdBy: one(users, {
-    fields: [channels.createdById],
-    references: [users.id],
-  }),
-}));
 
 export const channelMembers = pgTable("channel_members", {
   id: serial("id").primaryKey(),
-  channelId: integer("channel_id").references(() => channels.id).notNull(),
-  userId: integer("user_id").references(() => users.id).notNull(),
+  channelId: integer("channel_id")
+    .references(() => channels.id)
+    .notNull(),
+  userId: integer("user_id")
+    .references(() => users.id)
+    .notNull(),
   joinedAt: timestamp("joined_at").defaultNow(),
 });
-
-export const channelMembersRelations = relations(channelMembers, ({ one }) => ({
-  channel: one(channels, {
-    fields: [channelMembers.channelId],
-    references: [channels.id],
-  }),
-  user: one(users, {
-    fields: [channelMembers.userId],
-    references: [users.id],
-  }),
-}));
 
 export const messages = pgTable("messages", {
   id: serial("id").primaryKey(),
   content: text("content").notNull(),
   userId: integer("user_id").references(() => users.id),
   channelId: integer("channel_id").references(() => channels.id),
-  threadParentId: integer("thread_parent_id").references(() => messages.id),
-  attachments: jsonb("attachments").$type<{ url: string, name: string }[]>(),
+  attachments: jsonb("attachments").$type<{ url: string; name: string }[]>(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -68,20 +61,17 @@ export const reactions = pgTable("reactions", {
 
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
-  messages: many(messages),
-  channelMembers: many(channelMembers),
-  reactions: many(reactions),
-}));
-
-export const channelsRelations = relations(channels, ({ many, one }) => ({
-  messages: many(messages),
-  channelMembers: many(channelMembers, {
-    fields: [channels.id],
-    references: [channelMembers.channelId],
+  messages: many(messages, {
+    fields: [users.id],
+    references: [messages.userId],
   }),
-  createdBy: one(users, {
-    fields: [channels.createdById],
-    references: [users.id],
+  channelMembers: many(channelMembers, {
+    fields: [users.id],
+    references: [channelMembers.userId],
+  }),
+  reactions: many(reactions, {
+    fields: [users.id],
+    references: [reactions.userId],
   }),
 }));
 
@@ -94,28 +84,9 @@ export const messagesRelations = relations(messages, ({ one, many }) => ({
     fields: [messages.channelId],
     references: [channels.id],
   }),
-  threadParent: one(messages, {
-    fields: [messages.threadParentId],
-    references: [messages.id],
-  }),
-  threads: many(messages, {
-    fields: [messages.id],
-    references: [messages.threadParentId],
-  }),
   reactions: many(reactions, {
     fields: [messages.id],
     references: [reactions.messageId],
-  }),
-}));
-
-export const reactionsRelations = relations(reactions, ({ one }) => ({
-  user: one(users, {
-    fields: [reactions.userId],
-    references: [users.id],
-  }),
-  message: one(messages, {
-    fields: [reactions.messageId],
-    references: [messages.id],
   }),
 }));
 
