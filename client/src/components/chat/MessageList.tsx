@@ -40,7 +40,7 @@ export default function MessageList({ channelId, onThreadSelect }: MessageListPr
 
     return addMessageHandler((msg) => {
       if (msg.type === "message" && msg.channelId === channelId) {
-        // The message will be added through the React Query cache invalidation
+        // Message will be added through React Query cache invalidation
       }
     });
   }, [addMessageHandler, channelId]);
@@ -76,14 +76,19 @@ export default function MessageList({ channelId, onThreadSelect }: MessageListPr
     <div className="h-full flex flex-col">
       <ScrollArea ref={scrollRef} className="flex-1 p-4">
         <div className="space-y-4">
-          {messages?.map((message) => (
-            <MessageItem
-              key={message.id}
-              message={message as MessageWithUser}
-              onThreadSelect={onThreadSelect}
-              onReactionAdd={(emoji) => addReaction({ messageId: message.id, emoji })}
-            />
-          ))}
+          {messages?.map((message) => {
+            // Skip rendering if message doesn't have required data
+            if (!message?.user) return null;
+
+            return (
+              <MessageItem
+                key={message.id}
+                message={message as MessageWithUser}
+                onThreadSelect={onThreadSelect}
+                onReactionAdd={(emoji) => addReaction({ messageId: message.id, emoji })}
+              />
+            );
+          })}
         </div>
       </ScrollArea>
 
@@ -104,6 +109,8 @@ type MessageItemProps = {
 };
 
 function MessageItem({ message, onThreadSelect, onReactionAdd }: MessageItemProps) {
+  if (!message?.user) return null;
+
   return (
     <div className="flex gap-3 group">
       <Avatar>
@@ -147,11 +154,7 @@ function MessageItem({ message, onThreadSelect, onReactionAdd }: MessageItemProp
             Reply
           </Button>
 
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => onReactionAdd("👍")}
-          >
+          <Button variant="ghost" size="sm" onClick={() => onReactionAdd("👍")}>
             <Smile className="h-4 w-4 mr-1" />
             React
           </Button>

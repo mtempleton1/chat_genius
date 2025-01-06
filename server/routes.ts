@@ -30,20 +30,20 @@ export function registerRoutes(app: Express): Server {
   // Channel routes
   app.get("/api/channels", async (req, res) => {
     if (!req.user) return res.status(401).send("Not authenticated");
-    
+
     const userChannels = await db.query.channels.findMany({
       with: {
         members: true,
       },
       where: (channels, { eq }) => eq(channels.isPrivate, false),
     });
-    
+
     res.json(userChannels);
   });
 
   app.post("/api/channels", async (req, res) => {
     if (!req.user) return res.status(401).send("Not authenticated");
-    
+
     const { name, isPrivate } = req.body;
     const [channel] = await db
       .insert(channels)
@@ -53,14 +53,20 @@ export function registerRoutes(app: Express): Server {
         createdById: req.user.id,
       })
       .returning();
-    
+
+    // After creating the channel, add the creator as a member
+    await db.insert(channelMembers).values({
+      channelId: channel.id,
+      userId: req.user.id,
+    });
+
     res.json(channel);
   });
 
   // Message routes
   app.get("/api/channels/:channelId/messages", async (req, res) => {
     if (!req.user) return res.status(401).send("Not authenticated");
-    
+
     const channelMessages = await db.query.messages.findMany({
       where: eq(messages.channelId, parseInt(req.params.channelId)),
       with: {
@@ -74,32 +80,45 @@ export function registerRoutes(app: Express): Server {
       orderBy: desc(messages.createdAt),
       limit: 50,
     });
-    
+
     res.json(channelMessages);
   });
 
   app.post("/api/messages", async (req, res) => {
     if (!req.user) return res.status(401).send("Not authenticated");
-    
-    const { content, channelId, threadParentId } = req.body;
+
+    const { content, channelId } = req.body;
     const [message] = await db
       .insert(messages)
       .values({
         content,
         channelId,
-        threadParentId,
         userId: req.user.id,
       })
       .returning();
-    
-    res.json(message);
+
+    // Fetch the complete message with user data
+    const [completeMessage] = await db.query.messages.findMany({
+      where: eq(messages.id, message.id),
+      with: {
+        user: true,
+        reactions: {
+          with: {
+            user: true,
+          },
+        },
+      },
+      limit: 1,
+    });
+
+    res.json(completeMessage);
   });
 
   // File upload
   app.post("/api/upload", upload.single("file"), async (req, res) => {
     if (!req.user) return res.status(401).send("Not authenticated");
     if (!req.file) return res.status(400).send("No file uploaded");
-    
+
     const fileUrl = `/uploads/${req.file.filename}`;
     res.json({ url: fileUrl, name: req.file.originalname });
   });
@@ -107,7 +126,7 @@ export function registerRoutes(app: Express): Server {
   // Reactions
   app.post("/api/messages/:messageId/reactions", async (req, res) => {
     if (!req.user) return res.status(401).send("Not authenticated");
-    
+
     const { emoji } = req.body;
     const [reaction] = await db
       .insert(reactions)
@@ -117,13 +136,21 @@ export function registerRoutes(app: Express): Server {
         userId: req.user.id,
       })
       .returning();
-    
-    res.json(reaction);
+
+    const [completeReaction] = await db.query.reactions.findMany({
+      where: eq(reactions.id, reaction.id),
+      with: {
+        user: true,
+      },
+      limit: 1,
+    });
+
+    res.json(completeReaction);
   });
 
   app.delete("/api/messages/:messageId/reactions/:reactionId", async (req, res) => {
     if (!req.user) return res.status(401).send("Not authenticated");
-    
+
     await db
       .delete(reactions)
       .where(
@@ -132,7 +159,7 @@ export function registerRoutes(app: Express): Server {
           eq(reactions.userId, req.user.id)
         )
       );
-    
+
     res.status(204).send();
   });
 
