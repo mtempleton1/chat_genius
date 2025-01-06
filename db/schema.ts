@@ -89,6 +89,10 @@ export const messagesRelations = relations(messages, ({ one, many }) => ({
     fields: [messages.threadParentId],
     references: [messages.id],
   }),
+  threads: many(messages, {
+    fields: [messages.id],
+    references: [messages.threadParentId],
+  }),
   reactions: many(reactions, {
     fields: [messages.id],
     references: [reactions.messageId],
