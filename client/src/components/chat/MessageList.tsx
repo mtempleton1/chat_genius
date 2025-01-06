@@ -14,9 +14,19 @@ type MessageListProps = {
   onThreadSelect: (messageId: number) => void;
 };
 
+type MessageWithUser = Message & {
+  user: User;
+  reactions: Array<{
+    id: number;
+    emoji: string;
+    userId: number;
+    user: User;
+  }>;
+};
+
 export default function MessageList({ channelId, onThreadSelect }: MessageListProps) {
   const { messages, isLoading, sendMessage, addReaction } = useMessages(channelId ?? 0);
-  const { addMessageHandler } = useWebSocket();
+  const { addMessageHandler, sendMessage: sendWebSocketMessage } = useWebSocket();
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -26,12 +36,25 @@ export default function MessageList({ channelId, onThreadSelect }: MessageListPr
   }, [messages]);
 
   useEffect(() => {
+    if (!channelId) return;
+
     return addMessageHandler((msg) => {
       if (msg.type === "message" && msg.channelId === channelId) {
-        // Handle new message
+        // The message will be added through the React Query cache invalidation
       }
     });
   }, [addMessageHandler, channelId]);
+
+  const handleSendMessage = async (content: string) => {
+    if (!channelId) return;
+
+    await sendMessage(content);
+    sendWebSocketMessage({
+      type: "message",
+      channelId,
+      content,
+    });
+  };
 
   if (!channelId) {
     return (
@@ -56,7 +79,7 @@ export default function MessageList({ channelId, onThreadSelect }: MessageListPr
           {messages?.map((message) => (
             <MessageItem
               key={message.id}
-              message={message}
+              message={message as MessageWithUser}
               onThreadSelect={onThreadSelect}
               onReactionAdd={(emoji) => addReaction({ messageId: message.id, emoji })}
             />
@@ -66,7 +89,7 @@ export default function MessageList({ channelId, onThreadSelect }: MessageListPr
 
       <div className="p-4 border-t">
         <MessageInput
-          onSendMessage={sendMessage}
+          onSendMessage={handleSendMessage}
           fileUploadComponent={<FileUpload channelId={channelId} />}
         />
       </div>
@@ -75,7 +98,7 @@ export default function MessageList({ channelId, onThreadSelect }: MessageListPr
 }
 
 type MessageItemProps = {
-  message: Message & { user: User };
+  message: MessageWithUser;
   onThreadSelect: (messageId: number) => void;
   onReactionAdd: (emoji: string) => void;
 };
@@ -84,21 +107,21 @@ function MessageItem({ message, onThreadSelect, onReactionAdd }: MessageItemProp
   return (
     <div className="flex gap-3 group">
       <Avatar>
-        <AvatarImage src={message.user.avatar} alt={message.user.username} />
+        <AvatarImage src={message.user.avatar ?? undefined} alt={message.user.username} />
         <AvatarFallback>{message.user.username[0].toUpperCase()}</AvatarFallback>
       </Avatar>
-      
+
       <div className="flex-1">
         <div className="flex items-center gap-2">
           <span className="font-semibold">{message.user.username}</span>
           <span className="text-xs text-muted-foreground">
-            {new Date(message.createdAt).toLocaleTimeString()}
+            {message.createdAt ? new Date(message.createdAt).toLocaleTimeString() : ""}
           </span>
         </div>
-        
+
         <p className="mt-1">{message.content}</p>
-        
-        {message.attachments?.length > 0 && (
+
+        {message.attachments && message.attachments.length > 0 && (
           <div className="mt-2 flex gap-2">
             {message.attachments.map((attachment, i) => (
               <a
@@ -113,7 +136,7 @@ function MessageItem({ message, onThreadSelect, onReactionAdd }: MessageItemProp
             ))}
           </div>
         )}
-        
+
         <div className="mt-2 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
           <Button
             variant="ghost"
@@ -123,7 +146,7 @@ function MessageItem({ message, onThreadSelect, onReactionAdd }: MessageItemProp
             <MessageSquare className="h-4 w-4 mr-1" />
             Reply
           </Button>
-          
+
           <Button
             variant="ghost"
             size="sm"
