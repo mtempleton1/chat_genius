@@ -22,10 +22,21 @@ export const channels = pgTable("channels", {
 
 export const channelMembers = pgTable("channel_members", {
   id: serial("id").primaryKey(),
-  channelId: integer("channel_id").references(() => channels.id),
-  userId: integer("user_id").references(() => users.id),
+  channelId: integer("channel_id").references(() => channels.id).notNull(),
+  userId: integer("user_id").references(() => users.id).notNull(),
   joinedAt: timestamp("joined_at").defaultNow(),
 });
+
+export const channelMembersRelations = relations(channelMembers, ({ one }) => ({
+  channel: one(channels, {
+    fields: [channelMembers.channelId],
+    references: [channels.id],
+  }),
+  user: one(users, {
+    fields: [channelMembers.userId],
+    references: [users.id],
+  }),
+}));
 
 export const messages = pgTable("messages", {
   id: serial("id").primaryKey(),
