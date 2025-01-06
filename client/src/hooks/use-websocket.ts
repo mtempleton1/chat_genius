@@ -17,10 +17,11 @@ export function useWebSocket() {
   const connect = useCallback(() => {
     if (!user || wsRef.current?.readyState === WebSocket.OPEN) return;
 
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+    // Use relative URL path to support both development and production
+    const ws = new WebSocket(`${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}/ws`);
 
     ws.onopen = () => {
+      console.log("WebSocket connected");
       ws.send(JSON.stringify({ type: "auth", userId: user.id }));
       // Clear reconnect timeout if connection successful
       if (reconnectTimeoutRef.current) {
@@ -39,6 +40,7 @@ export function useWebSocket() {
     };
 
     ws.onclose = () => {
+      console.log("WebSocket disconnected");
       // Only attempt to reconnect if we still have a user and the page is visible
       if (user && document.visibilityState === "visible") {
         // Exponential backoff for reconnection attempts
@@ -49,7 +51,8 @@ export function useWebSocket() {
       }
     };
 
-    ws.onerror = () => {
+    ws.onerror = (error) => {
+      console.error("WebSocket error:", error);
       toast({
         title: "Connection Error",
         description: "Lost connection to chat server. Attempting to reconnect...",
