@@ -17,8 +17,17 @@ export const channels = pgTable("channels", {
   name: text("name").notNull(),
   isPrivate: boolean("is_private").default(false),
   createdAt: timestamp("created_at").defaultNow(),
-  createdById: integer("created_by_id").references(() => users.id),
+  createdById: integer("created_by_id").references(() => users.id).notNull(),
 });
+
+export const channelsRelations = relations(channels, ({ many, one }) => ({
+  members: many(channelMembers),
+  messages: many(messages),
+  createdBy: one(users, {
+    fields: [channels.createdById],
+    references: [users.id],
+  }),
+}));
 
 export const channelMembers = pgTable("channel_members", {
   id: serial("id").primaryKey(),
