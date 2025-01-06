@@ -5,29 +5,21 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { MessageSquare, Smile } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import MessageInput from "./MessageInput";
 import FileUpload from "./FileUpload";
-import type { Message, User } from "@db/schema";
+import type { Message } from "@db/schema";
 
 type MessageListProps = {
   channelId: number | null;
   onThreadSelect: (messageId: number) => void;
 };
 
-type MessageWithUser = Message & {
-  user: User;
-  reactions: Array<{
-    id: number;
-    emoji: string;
-    userId: number;
-    user: User;
-  }>;
-};
-
 export default function MessageList({ channelId, onThreadSelect }: MessageListProps) {
   const { messages, isLoading, sendMessage, addReaction } = useMessages(channelId ?? 0);
   const { addMessageHandler, sendMessage: sendWebSocketMessage } = useWebSocket();
   const scrollRef = useRef<HTMLDivElement>(null);
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     const scrollElement = scrollRef.current;
@@ -41,10 +33,12 @@ export default function MessageList({ channelId, onThreadSelect }: MessageListPr
 
     return addMessageHandler((msg) => {
       if (msg.type === "message" && msg.channelId === channelId) {
-        // Message will be added through React Query cache invalidation
+        queryClient.invalidateQueries({
+          queryKey: [`/api/channels/${channelId}/messages`],
+        });
       }
     });
-  }, [addMessageHandler, channelId]);
+  }, [addMessageHandler, channelId, queryClient]);
 
   const handleSendMessage = async (content: string) => {
     if (!channelId) return;
@@ -82,18 +76,14 @@ export default function MessageList({ channelId, onThreadSelect }: MessageListPr
       <div className="flex-1 overflow-hidden" ref={scrollRef}>
         <ScrollArea className="h-full">
           <div className="p-4 space-y-4">
-            {messages?.map((message) => {
-              if (!message?.user) return null;
-
-              return (
-                <MessageItem
-                  key={message.id}
-                  message={message as MessageWithUser}
-                  onThreadSelect={onThreadSelect}
-                  onReactionAdd={(emoji) => addReaction({ messageId: message.id, emoji })}
-                />
-              );
-            })}
+            {messages?.map((message) => (
+              <MessageItem
+                key={message.id}
+                message={message}
+                onThreadSelect={onThreadSelect}
+                onReactionAdd={(emoji) => addReaction({ messageId: message.id, emoji })}
+              />
+            ))}
           </div>
         </ScrollArea>
       </div>
@@ -109,18 +99,24 @@ export default function MessageList({ channelId, onThreadSelect }: MessageListPr
 }
 
 type MessageItemProps = {
-  message: MessageWithUser;
+  message: Message & {
+    user?: {
+      id: number;
+      username: string;
+      avatar?: string | null;
+    };
+  };
   onThreadSelect: (messageId: number) => void;
   onReactionAdd: (emoji: string) => void;
 };
 
 function MessageItem({ message, onThreadSelect, onReactionAdd }: MessageItemProps) {
-  if (!message?.user) return null;
+  if (!message.user) return null;
 
   return (
     <div className="flex gap-3 group">
       <Avatar>
-        <AvatarImage src={message.user.avatar ?? undefined} alt={message.user.username} />
+        <AvatarImage src={message.user.avatar || undefined} alt={message.user.username} />
         <AvatarFallback>{message.user.username[0].toUpperCase()}</AvatarFallback>
       </Avatar>
 
@@ -128,13 +124,13 @@ function MessageItem({ message, onThreadSelect, onReactionAdd }: MessageItemProp
         <div className="flex items-center gap-2">
           <span className="font-semibold">{message.user.username}</span>
           <span className="text-xs text-muted-foreground">
-            {message.createdAt ? new Date(message.createdAt).toLocaleTimeString() : ""}
+            {new Date(message.createdAt!).toLocaleTimeString()}
           </span>
         </div>
 
         <p className="mt-1">{message.content}</p>
 
-        {message.attachments && message.attachments.length > 0 && (
+        {message.attachments?.length > 0 && (
           <div className="mt-2 flex gap-2">
             {message.attachments.map((attachment, i) => (
               <a

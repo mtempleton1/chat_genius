@@ -5,7 +5,7 @@ export function useMessages(channelId: number) {
   const queryClient = useQueryClient();
 
   const { data: messages, isLoading } = useQuery<Message[]>({
-    queryKey: ["/api/channels", channelId, "messages"],
+    queryKey: [`/api/channels/${channelId}/messages`],
     enabled: channelId > 0,
   });
 
@@ -24,9 +24,11 @@ export function useMessages(channelId: number) {
 
       return response.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ["/api/channels", channelId, "messages"],
+    onSuccess: (newMessage) => {
+      // Optimistically update the messages cache
+      queryClient.setQueryData<Message[]>([`/api/channels/${channelId}/messages`], (old) => {
+        if (!old) return [newMessage];
+        return [...old, newMessage];
       });
     },
   });
@@ -48,7 +50,7 @@ export function useMessages(channelId: number) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: ["/api/channels", channelId, "messages"],
+        queryKey: [`/api/channels/${channelId}/messages`],
       });
     },
   });

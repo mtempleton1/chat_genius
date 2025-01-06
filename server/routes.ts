@@ -4,9 +4,8 @@ import { setupAuth } from "./auth";
 import { setupWebSocket } from "./websocket";
 import { db } from "@db";
 import { channels, messages, reactions, channelMembers } from "@db/schema";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, asc } from "drizzle-orm";
 import multer from "multer";
-import path from "path";
 
 // Configure multer for file uploads
 const upload = multer({
@@ -54,7 +53,7 @@ export function registerRoutes(app: Express): Server {
       })
       .returning();
 
-    // After creating the channel, add the creator as a member
+    // Add creator as a member
     await db.insert(channelMembers).values({
       channelId: channel.id,
       userId: req.user.id,
@@ -77,11 +76,11 @@ export function registerRoutes(app: Express): Server {
           },
         },
       },
-      orderBy: desc(messages.createdAt),
+      orderBy: asc(messages.createdAt),
       limit: 50,
     });
 
-    res.json(channelMessages);
+    res.json(channelMessages.reverse());
   });
 
   app.post("/api/messages", async (req, res) => {
@@ -97,7 +96,7 @@ export function registerRoutes(app: Express): Server {
       })
       .returning();
 
-    // Fetch the complete message with user data
+    // Fetch complete message with user data
     const [completeMessage] = await db.query.messages.findMany({
       where: eq(messages.id, message.id),
       with: {
