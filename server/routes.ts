@@ -1,0 +1,140 @@
+import type { Express } from "express";
+import { createServer, type Server } from "http";
+import { setupAuth } from "./auth";
+import { setupWebSocket } from "./websocket";
+import { db } from "@db";
+import { channels, messages, reactions, channelMembers } from "@db/schema";
+import { eq, and, desc } from "drizzle-orm";
+import multer from "multer";
+import path from "path";
+
+// Configure multer for file uploads
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: "uploads/",
+    filename: (req, file, cb) => {
+      cb(null, `${Date.now()}-${file.originalname}`);
+    },
+  }),
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB limit
+  },
+});
+
+export function registerRoutes(app: Express): Server {
+  setupAuth(app);
+
+  const httpServer = createServer(app);
+  setupWebSocket(httpServer);
+
+  // Channel routes
+  app.get("/api/channels", async (req, res) => {
+    if (!req.user) return res.status(401).send("Not authenticated");
+    
+    const userChannels = await db.query.channels.findMany({
+      with: {
+        members: true,
+      },
+      where: (channels, { eq }) => eq(channels.isPrivate, false),
+    });
+    
+    res.json(userChannels);
+  });
+
+  app.post("/api/channels", async (req, res) => {
+    if (!req.user) return res.status(401).send("Not authenticated");
+    
+    const { name, isPrivate } = req.body;
+    const [channel] = await db
+      .insert(channels)
+      .values({
+        name,
+        isPrivate,
+        createdById: req.user.id,
+      })
+      .returning();
+    
+    res.json(channel);
+  });
+
+  // Message routes
+  app.get("/api/channels/:channelId/messages", async (req, res) => {
+    if (!req.user) return res.status(401).send("Not authenticated");
+    
+    const channelMessages = await db.query.messages.findMany({
+      where: eq(messages.channelId, parseInt(req.params.channelId)),
+      with: {
+        user: true,
+        reactions: {
+          with: {
+            user: true,
+          },
+        },
+      },
+      orderBy: desc(messages.createdAt),
+      limit: 50,
+    });
+    
+    res.json(channelMessages);
+  });
+
+  app.post("/api/messages", async (req, res) => {
+    if (!req.user) return res.status(401).send("Not authenticated");
+    
+    const { content, channelId, threadParentId } = req.body;
+    const [message] = await db
+      .insert(messages)
+      .values({
+        content,
+        channelId,
+        threadParentId,
+        userId: req.user.id,
+      })
+      .returning();
+    
+    res.json(message);
+  });
+
+  // File upload
+  app.post("/api/upload", upload.single("file"), async (req, res) => {
+    if (!req.user) return res.status(401).send("Not authenticated");
+    if (!req.file) return res.status(400).send("No file uploaded");
+    
+    const fileUrl = `/uploads/${req.file.filename}`;
+    res.json({ url: fileUrl, name: req.file.originalname });
+  });
+
+  // Reactions
+  app.post("/api/messages/:messageId/reactions", async (req, res) => {
+    if (!req.user) return res.status(401).send("Not authenticated");
+    
+    const { emoji } = req.body;
+    const [reaction] = await db
+      .insert(reactions)
+      .values({
+        emoji,
+        messageId: parseInt(req.params.messageId),
+        userId: req.user.id,
+      })
+      .returning();
+    
+    res.json(reaction);
+  });
+
+  app.delete("/api/messages/:messageId/reactions/:reactionId", async (req, res) => {
+    if (!req.user) return res.status(401).send("Not authenticated");
+    
+    await db
+      .delete(reactions)
+      .where(
+        and(
+          eq(reactions.id, parseInt(req.params.reactionId)),
+          eq(reactions.userId, req.user.id)
+        )
+      );
+    
+    res.status(204).send();
+  });
+
+  return httpServer;
+}
