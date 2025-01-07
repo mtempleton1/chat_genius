@@ -14,14 +14,14 @@ export function useMessages(channelId: number | null) {
   });
 
   const sendMessage = useMutation({
-    mutationFn: async (content: string, options?: { parentId?: number }) => {
+    mutationFn: async ({ content, parentId }: { content: string; parentId?: number }) => {
       const response = await fetch("/api/messages", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           content, 
-          channelId: options?.parentId ? messages?.[0].channelId : channelId,
-          parentId: options?.parentId
+          channelId: parentId ? messages?.[0].channelId : channelId,
+          parentId
         }),
         credentials: "include",
       });

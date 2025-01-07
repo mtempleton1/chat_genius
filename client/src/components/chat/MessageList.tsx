@@ -43,7 +43,7 @@ export default function MessageList({ channelId, onThreadSelect }: MessageListPr
   const handleSendMessage = async (content: string) => {
     if (!channelId) return;
 
-    await sendMessage(content);
+    await sendMessage({ content });
     sendWebSocketMessage({
       type: "message",
       channelId,

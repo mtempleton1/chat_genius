@@ -56,7 +56,7 @@ export default function ThreadView({ messageId, onClose }: ThreadViewProps) {
 
       <div className="p-4 border-t">
         <MessageInput
-          onSendMessage={(content) => sendMessage(content, { parentId: messageId })}
+          onSendMessage={(content) => sendMessage({ content, parentId: messageId })}
           fileUploadComponent={<FileUpload channelId={parentMessage.channelId!} />}
         />
       </div>
