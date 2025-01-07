@@ -34,8 +34,8 @@ export default function MessageList({
   const { addMessageHandler, sendMessage: sendWebSocketMessage } = useWebSocket();
   const scrollRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
-  const handlerRef = useRef<(() => void) | null>(null);
 
+  // Auto-scroll when new messages arrive
   useEffect(() => {
     const scrollElement = scrollRef.current;
     if (scrollElement) {
@@ -49,16 +49,10 @@ export default function MessageList({
 
     console.log(`Setting up channel message handler for channel ${channelId}`);
 
-    // Remove existing handler if any
-    if (handlerRef.current) {
-      handlerRef.current();
-      handlerRef.current = null;
-    }
-
-    // Add new handler for channel messages
+    // Always set up the channel message handler
     const cleanup = addMessageHandler((msg) => {
       try {
-        // Handle regular channel messages only
+        // Handle regular channel messages
         if (msg.type === "message" && msg.channelId === channelId) {
           console.log("MessageList received channel message:", msg);
 
@@ -105,16 +99,10 @@ export default function MessageList({
       }
     }, `channel-${channelId}`);
 
-    // Store cleanup function
-    handlerRef.current = cleanup;
-
-    // Return cleanup function
+    // Clean up only when unmounting or changing channels
     return () => {
-      if (handlerRef.current) {
-        console.log(`Cleaning up channel message handler for channel ${channelId}`);
-        handlerRef.current();
-        handlerRef.current = null;
-      }
+      console.log(`Cleaning up channel message handler for channel ${channelId}`);
+      cleanup();
     };
   }, [channelId, queryClient, addMessageHandler]);
 

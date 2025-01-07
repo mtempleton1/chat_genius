@@ -61,18 +61,13 @@ export function useWebSocket() {
           return;
         }
 
-        // Call all registered message handlers that match the message type or scope
+        // Process all handlers for every message, let them decide if they should handle it
         messageHandlersRef.current.forEach(({ handler, scope }) => {
           try {
-            if (
-              (message.type === "message" && scope.startsWith("channel-")) ||
-              (message.type === "thread_message" && scope.startsWith("thread-"))
-            ) {
-              console.log(`Calling handler for scope: ${scope}`);
-              handler(message);
-            }
+            console.log(`Calling handler for scope: ${scope}`);
+            handler(message);
           } catch (handlerError) {
-            console.error(`Message handler error for scope ${scope}:`, handlerError);
+            console.error(`Handler error for scope ${scope}:`, handlerError);
           }
         });
       } catch (error) {
@@ -188,18 +183,51 @@ export function useWebSocket() {
         `Adding new WebSocket message handler (${handlerId}) for scope: ${scope}`,
       );
 
-      messageHandlersRef.current.push({
+      // Check for existing handlers with the same scope
+      const existingHandlerIndex = messageHandlersRef.current.findIndex(
+        (h) => h.scope === scope
+      );
+
+      // Update or add the handler
+      const newHandler = {
         id: handlerId,
         scope,
         handler,
-      });
+      };
 
+      if (existingHandlerIndex !== -1) {
+        // Update existing handler
+        messageHandlersRef.current[existingHandlerIndex] = newHandler;
+      } else {
+        // Add new handler
+        messageHandlersRef.current.push(newHandler);
+      }
+
+      // Log current handlers for debugging
+      console.log(
+        "Current handlers:",
+        messageHandlersRef.current.map((h) => ({
+          id: h.id,
+          scope: h.scope,
+        })),
+      );
+
+      // Return cleanup function that only removes this specific handler
       return () => {
         console.log(
           `Removing WebSocket message handler (${handlerId}) from scope: ${scope}`,
         );
         messageHandlersRef.current = messageHandlersRef.current.filter(
-          (h) => h.id !== handlerId,
+          (h) => h.id !== handlerId
+        );
+
+        // Log remaining handlers
+        console.log(
+          "Remaining handlers:",
+          messageHandlersRef.current.map((h) => ({
+            id: h.id,
+            scope: h.scope,
+          })),
         );
       };
     },

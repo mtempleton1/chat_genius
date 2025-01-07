@@ -6,8 +6,9 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-// Add CORS headers for production
+// Add CORS headers
 app.use((req, res, next) => {
+  // Allow the actual origin instead of '*' for WebSocket support
   const origin = req.headers.origin;
   if (origin) {
     res.setHeader('Access-Control-Allow-Origin', origin);
@@ -50,8 +51,7 @@ app.use((req, res, next) => {
 });
 
 (async () => {
-  // ALWAYS use port 5000 for consistency
-  const PORT = 5000;
+  const PORT = 5000; // Changed back to port 5000 as per development guidelines
   const server = registerRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
@@ -69,5 +69,13 @@ app.use((req, res, next) => {
 
   server.listen(PORT, "0.0.0.0", () => {
     log(`Server started on port ${PORT}`);
+  }).on('error', (error: NodeJS.ErrnoException) => {
+    if (error.code === 'EADDRINUSE') {
+      console.error(`Port ${PORT} is already in use. Please ensure no other instance of the server is running.`);
+      process.exit(1);
+    } else {
+      console.error('Server error:', error);
+      process.exit(1);
+    }
   });
 })();

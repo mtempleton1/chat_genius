@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { X } from "lucide-react";
 import MessageInput from "./MessageInput";
 import FileUpload from "./FileUpload";
-import type { Message, User } from "@db/schema";
+import type { Message, User, Reaction } from "@db/schema";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 
 type ThreadViewProps = {
@@ -17,6 +17,7 @@ type ThreadViewProps = {
 
 type ThreadMessage = Message & {
   user?: User;
+  reactions?: Reaction[];
   attachments?: Array<{ url: string; name: string }> | null;
 };
 
@@ -25,10 +26,19 @@ export default function ThreadView({ messageId, onClose }: ThreadViewProps) {
   const { addMessageHandler, sendMessage: sendWebSocketMessage } = useWebSocket();
   const queryClient = useQueryClient();
   const handlerRef = useRef<(() => void) | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll when new messages arrive
+  useEffect(() => {
+    const scrollElement = scrollRef.current;
+    if (scrollElement) {
+      scrollElement.scrollTop = scrollElement.scrollHeight;
+    }
+  }, [messages]);
 
   // Set up WebSocket handler for thread messages
   useEffect(() => {
-    console.log("Setting up thread message handler for messageId:", messageId);
+    console.log(`Setting up thread message handler for messageId: ${messageId}`);
 
     // Remove existing handler if any
     if (handlerRef.current) {
@@ -58,12 +68,22 @@ export default function ThreadView({ messageId, onClose }: ThreadViewProps) {
                 attachments: msg.attachments || null,
               };
 
+              console.log("Updating thread messages:", {
+                oldMessages,
+                newMessage,
+              });
+
               // Check if message already exists
               if (oldMessages?.some((m) => m.id === newMessage.id)) {
                 return oldMessages;
               }
 
-              return [...(oldMessages || []), newMessage];
+              // Add new message and sort by creation time
+              return [...(oldMessages || []), newMessage].sort(
+                (a, b) =>
+                  new Date(a.createdAt!).getTime() -
+                  new Date(b.createdAt!).getTime(),
+              );
             },
           );
         }
@@ -76,8 +96,8 @@ export default function ThreadView({ messageId, onClose }: ThreadViewProps) {
     handlerRef.current = cleanup;
 
     return () => {
-      console.log("Cleaning up thread message handler for messageId:", messageId);
       if (handlerRef.current) {
+        console.log("Cleaning up thread message handler for messageId:", messageId);
         handlerRef.current();
         handlerRef.current = null;
       }
@@ -89,19 +109,10 @@ export default function ThreadView({ messageId, onClose }: ThreadViewProps) {
 
     try {
       const newMessage = await sendMessage({ content, parentId: messageId });
-      console.log("Sending thread message through WebSocket:", {
-        type: "thread_message",
-        channelId: newMessage.channelId,
-        messageId: newMessage.id,
-        parentId: messageId,
-        content: newMessage.content,
-        userId: newMessage.userId,
-        user: newMessage.user,
-        createdAt: newMessage.createdAt,
-        attachments: newMessage.attachments,
-      });
+      console.log("Sending thread message:", newMessage);
 
-      // Broadcast the message through WebSocket
+      // Send both thread_message and regular message updates
+      // thread_message for thread view updates
       sendWebSocketMessage({
         type: "thread_message",
         channelId: newMessage.channelId,
@@ -111,7 +122,14 @@ export default function ThreadView({ messageId, onClose }: ThreadViewProps) {
         userId: newMessage.userId,
         user: newMessage.user,
         attachments: newMessage.attachments,
-        createdAt: newMessage.createdAt
+        createdAt: newMessage.createdAt,
+      });
+
+      // message for channel view thread count updates
+      sendWebSocketMessage({
+        type: "message",
+        channelId: newMessage.channelId,
+        newMessage,
       });
     } catch (error) {
       console.error("Error sending thread message:", error);
@@ -148,7 +166,7 @@ export default function ThreadView({ messageId, onClose }: ThreadViewProps) {
         </Button>
       </div>
 
-      <ScrollArea className="flex-1">
+      <ScrollArea className="flex-1" ref={scrollRef}>
         <div className="p-4 space-y-4">
           <ThreadMessage message={parentMessage} isParent />
           {replies?.map((message) => (

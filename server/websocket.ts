@@ -17,6 +17,7 @@ export function setupWebSocket(server: HttpServer) {
   });
 
   server.on("upgrade", (request, socket, head) => {
+    // Skip handling Vite HMR requests
     if (request.headers["sec-websocket-protocol"] === "vite-hmr") {
       socket.destroy();
       return;
@@ -34,6 +35,7 @@ export function setupWebSocket(server: HttpServer) {
   }
 
   wss.on("connection", (ws: Client) => {
+    console.log("New WebSocket connection established");
     ws.isAlive = true;
     ws.channels = new Set();
     ws.on("pong", heartbeat);
@@ -46,6 +48,7 @@ export function setupWebSocket(server: HttpServer) {
           case "auth":
             ws.userId = data.userId;
             clients.set(data.userId, ws);
+            console.log(`User ${data.userId} authenticated via WebSocket`);
 
             // Update user status
             await db
@@ -76,6 +79,7 @@ export function setupWebSocket(server: HttpServer) {
 
           case "message":
             if (!ws.userId || !data.newMessage?.channelId) break;
+            console.log("Received message:", data);
 
             const channelId = data.newMessage.channelId;
             const parentId = data.newMessage.parentId;
@@ -178,6 +182,7 @@ export function setupWebSocket(server: HttpServer) {
         .where(eq(channelMembers.channelId, channelId));
 
       const data = JSON.stringify(message);
+      console.log(`Broadcasting to channel ${channelId}:`, message);
 
       for (const { userId } of channelMemberIds) {
         const client = clients.get(userId);
