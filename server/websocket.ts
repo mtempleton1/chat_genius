@@ -98,15 +98,15 @@ export function setupWebSocket(server: HttpServer) {
               reactions: [],
             };
 
-            // Broadcast to channel members
-            broadcastToChannel(data.channelId, messageData);
+            // Broadcast to channel members (excluding sender)
+            broadcastToChannel(data.channelId, messageData, ws.userId);
 
             // If this is a thread message, broadcast it again with thread-specific type
             if (data.parentId) {
               broadcastToChannel(data.channelId, {
                 ...messageData,
                 type: "thread_message",
-              });
+              }, ws.userId);
             }
 
             // Send confirmation back to sender
@@ -176,25 +176,23 @@ export function setupWebSocket(server: HttpServer) {
     clearInterval(interval);
   });
 
-  async function broadcastToChannel(channelId: number, message: any) {
+  async function broadcastToChannel(channelId: number, message: any, excludeUserId?: number) {
     const channelMemberIds = await db
       .select({ userId: channelMembers.userId })
       .from(channelMembers)
       .where(eq(channelMembers.channelId, channelId));
 
     const data = JSON.stringify(message);
-    console.log("IN BROADCAST TO CHANNEL");
-    console.log(data);
-    channelMemberIds.forEach(({ userId }) => {
+    
+    for (const { userId } of channelMemberIds) {
+      // Skip sending to self if excludeUserId is provided
+      if (excludeUserId && userId === excludeUserId) continue;
+      
       const client = clients.get(userId);
-      console.log("HERE");
-      console.log(client);
-      console.log(client?.readyState, WebSocket.OPEN);
       if (client?.readyState === WebSocket.OPEN) {
-        console.log("SSECINDG....");
         client.send(data);
       }
-    });
+    }
   }
 
   function broadcastUserStatus(userId: number, status: string) {
