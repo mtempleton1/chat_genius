@@ -29,7 +29,7 @@ export const workspaces = pgTable("workspaces", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-// Users table - updated with workspace relation
+// Users table
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   username: text("username").unique().notNull(),
@@ -53,7 +53,7 @@ export const workspaceMembers = pgTable("workspace_members", {
   joinedAt: timestamp("joined_at").defaultNow(),
 });
 
-// Channels table - updated with workspace relation
+// Channels table
 export const channels = pgTable("channels", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
@@ -111,6 +111,19 @@ export const workspacesRelations = relations(workspaces, ({ one, many }) => ({
   members: many(workspaceMembers),
 }));
 
+export const channelsRelations = relations(channels, ({ one, many }) => ({
+  workspace: one(workspaces, {
+    fields: [channels.workspaceId],
+    references: [workspaces.id],
+  }),
+  messages: many(messages),
+  members: many(channelMembers),
+  createdBy: one(users, {
+    fields: [channels.createdById],
+    references: [users.id],
+  }),
+}));
+
 export const usersRelations = relations(users, ({ many }) => ({
   workspaces: many(workspaceMembers),
   messages: many(messages),
@@ -129,15 +142,13 @@ export const workspaceMembersRelations = relations(workspaceMembers, ({ one }) =
   }),
 }));
 
-export const channelsRelations = relations(channels, ({ one, many }) => ({
-  workspace: one(workspaces, {
-    fields: [channels.workspaceId],
-    references: [workspaces.id],
+export const channelMembersRelations = relations(channelMembers, ({ one }) => ({
+  channel: one(channels, {
+    fields: [channelMembers.channelId],
+    references: [channels.id],
   }),
-  messages: many(messages),
-  members: many(channelMembers),
-  createdBy: one(users, {
-    fields: [channels.createdById],
+  user: one(users, {
+    fields: [channelMembers.userId],
     references: [users.id],
   }),
 }));
@@ -155,22 +166,8 @@ export const messagesRelations = relations(messages, ({ one, many }) => ({
     fields: [messages.parentId],
     references: [messages.id],
   }),
-  replies: many(messages, {
-    fields: [messages.id],
-    references: [messages.parentId],
-  }),
+  replies: many(messages),
   reactions: many(reactions),
-}));
-
-export const channelMembersRelations = relations(channelMembers, ({ one }) => ({
-  channel: one(channels, {
-    fields: [channelMembers.channelId],
-    references: [channels.id],
-  }),
-  user: one(users, {
-    fields: [channelMembers.userId],
-    references: [users.id],
-  }),
 }));
 
 export const reactionsRelations = relations(reactions, ({ one }) => ({
@@ -185,20 +182,17 @@ export const reactionsRelations = relations(reactions, ({ one }) => ({
 }));
 
 // Schemas
-export const insertUserSchema = createInsertSchema(users);
-export const selectUserSchema = createSelectSchema(users);
-
-export const insertOrganizationSchema = createInsertSchema(organizations);
-export const selectOrganizationSchema = createSelectSchema(organizations);
-
-export const insertWorkspaceSchema = createInsertSchema(workspaces);
-export const selectWorkspaceSchema = createSelectSchema(workspaces);
-
 export const insertChannelSchema = createInsertSchema(channels);
 export const selectChannelSchema = createSelectSchema(channels);
 
 export const insertMessageSchema = createInsertSchema(messages);
 export const selectMessageSchema = createSelectSchema(messages);
+
+export const insertUserSchema = createInsertSchema(users);
+export const selectUserSchema = createSelectSchema(users);
+
+export const insertWorkspaceSchema = createInsertSchema(workspaces);
+export const selectWorkspaceSchema = createSelectSchema(workspaces);
 
 // Types
 export type User = InferModel<typeof users>;

@@ -13,8 +13,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { useToast } from "@/hooks/use-toast";
 import type { Channel } from "@db/schema";
 import { cn } from "@/lib/utils";
+import { useUser } from "@/hooks/use-user";
 
 type ChannelListProps = {
   selectedChannelId: number | null;
@@ -24,14 +26,21 @@ type ChannelListProps = {
 export default function ChannelList({ selectedChannelId, onSelectChannel }: ChannelListProps) {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const { user } = useUser();
+
+  const workspaceId = user?.workspaceId;
 
   const { data: channels } = useQuery<Channel[]>({
-    queryKey: ["/api/channels"],
+    queryKey: [`/api/workspaces/${workspaceId}/channels`],
+    enabled: !!workspaceId,
   });
 
   const createChannel = useMutation({
     mutationFn: async (data: { name: string; isPrivate: boolean }) => {
-      const response = await fetch("/api/channels", {
+      if (!workspaceId) throw new Error("No workspace selected");
+
+      const response = await fetch(`/api/workspaces/${workspaceId}/channels`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -45,8 +54,19 @@ export default function ChannelList({ selectedChannelId, onSelectChannel }: Chan
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/channels"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/workspaces/${workspaceId}/channels`] });
       setIsCreateOpen(false);
+      toast({
+        title: "Success",
+        description: "Channel created successfully",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create channel",
+        variant: "destructive",
+      });
     },
   });
 
@@ -58,6 +78,8 @@ export default function ChannelList({ selectedChannelId, onSelectChannel }: Chan
       isPrivate: formData.get("private") === "on",
     });
   };
+
+  if (!workspaceId) return null;
 
   return (
     <div className="h-full flex flex-col p-4 border-r">
@@ -82,8 +104,8 @@ export default function ChannelList({ selectedChannelId, onSelectChannel }: Chan
                 <Switch id="private" name="private" />
                 <Label htmlFor="private">Private Channel</Label>
               </div>
-              <Button type="submit" className="w-full">
-                Create Channel
+              <Button type="submit" className="w-full" disabled={createChannel.isPending}>
+                {createChannel.isPending ? "Creating..." : "Create Channel"}
               </Button>
             </form>
           </DialogContent>
