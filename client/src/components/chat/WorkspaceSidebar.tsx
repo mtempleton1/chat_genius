@@ -7,6 +7,7 @@ import { useUser } from "@/hooks/use-user";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
+import PreferencesDialog from "@/components/settings/PreferencesDialog";
 
 type WorkspaceSidebarProps = {
   activeView: string;
@@ -16,6 +17,7 @@ type WorkspaceSidebarProps = {
 export default function WorkspaceSidebar({ activeView, onViewChange }: WorkspaceSidebarProps) {
   const { user } = useUser();
   const [status, setStatus] = useState(user?.status || "");
+  const [showPreferences, setShowPreferences] = useState(false);
   const queryClient = useQueryClient();
 
   const updateStatus = useMutation({
@@ -53,6 +55,7 @@ export default function WorkspaceSidebar({ activeView, onViewChange }: Workspace
 
   return (
     <div className="w-[72px] h-full flex flex-col items-center bg-sidebar">
+      {/* Top navigation section */}
       <div className="flex-1 flex flex-col items-center gap-2 p-3 border-r">
         {views.map(({ id, icon: Icon, label }) => (
           <Button
@@ -71,7 +74,8 @@ export default function WorkspaceSidebar({ activeView, onViewChange }: Workspace
         ))}
       </div>
 
-      <div className="p-3 border-t border-r w-full">
+      {/* User profile section at bottom with border */}
+      <div className="p-3 border-t border-r border-sidebar-border w-full">
         <Popover>
           <PopoverTrigger asChild>
             <Button
@@ -79,52 +83,60 @@ export default function WorkspaceSidebar({ activeView, onViewChange }: Workspace
               size="icon"
               className="w-11 h-11 rounded-lg hover:bg-sidebar-accent hover:text-sidebar-accent-foreground relative"
             >
-              <User className="h-5 w-5" />
+              {user?.avatar ? (
+                <img
+                  src={user.avatar}
+                  alt={user.username}
+                  className="h-7 w-7 rounded-full"
+                />
+              ) : (
+                <UserCircle className="h-7 w-7" />
+              )}
               {user?.status && (
                 <div className="absolute bottom-1 right-1 w-2 h-2 bg-green-500 rounded-full" />
               )}
               <span className="sr-only">User Profile</span>
             </Button>
           </PopoverTrigger>
-          <PopoverContent side="right" className="w-80 p-4">
+          <PopoverContent side="right" align="start" className="w-80 p-4">
             <div className="space-y-4">
               {user ? (
                 <div className="flex items-start gap-3">
-                  <div className="h-10 w-10 rounded-full bg-sidebar-accent flex items-center justify-center">
+                  <div className="h-12 w-12 rounded-full bg-sidebar-accent flex items-center justify-center overflow-hidden">
                     {user.avatar ? (
                       <img
                         src={user.avatar}
                         alt={user.username}
-                        className="h-full w-full rounded-full object-cover"
+                        className="h-full w-full object-cover"
                       />
                     ) : (
-                      <UserCircle className="h-6 w-6" />
+                      <UserCircle className="h-8 w-8" />
                     )}
                   </div>
-                  <div>
-                    <h4 className="font-bold text-sm">{user.username}</h4>
-                    <p className="text-xs text-muted-foreground">
+                  <div className="flex-1">
+                    <h4 className="font-bold text-base">{user.username}</h4>
+                    <p className="text-sm text-muted-foreground">
                       {user.status || "No status set"}
                     </p>
                   </div>
                 </div>
               ) : (
                 <div className="flex items-center gap-3">
-                  <Skeleton className="h-10 w-10 rounded-full" />
+                  <Skeleton className="h-12 w-12 rounded-full" />
                   <div className="space-y-2">
+                    <Skeleton className="h-5 w-32" />
                     <Skeleton className="h-4 w-24" />
-                    <Skeleton className="h-3 w-16" />
                   </div>
                 </div>
               )}
 
               <div className="space-y-2">
-                <label className="text-xs text-muted-foreground">
+                <label className="text-xs font-medium text-muted-foreground">
                   Update your status
                 </label>
                 <Input 
                   placeholder="What's on your mind?"
-                  className="h-8"
+                  className="h-9"
                   value={status}
                   onChange={(e) => setStatus(e.target.value)}
                   onKeyDown={handleStatusUpdate}
@@ -132,17 +144,18 @@ export default function WorkspaceSidebar({ activeView, onViewChange }: Workspace
                 />
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-1 pt-2">
                 <Button
                   variant="ghost"
-                  className="w-full justify-start h-8 px-2 text-sm gap-2"
+                  className="w-full justify-start h-9 px-2 text-sm font-medium gap-2"
                 >
-                  <UserCircle className="h-4 w-4" />
+                  <User className="h-4 w-4" />
                   Profile
                 </Button>
                 <Button
                   variant="ghost"
-                  className="w-full justify-start h-8 px-2 text-sm gap-2"
+                  className="w-full justify-start h-9 px-2 text-sm font-medium gap-2"
+                  onClick={() => setShowPreferences(true)}
                 >
                   <Settings className="h-4 w-4" />
                   Preferences
@@ -152,6 +165,11 @@ export default function WorkspaceSidebar({ activeView, onViewChange }: Workspace
           </PopoverContent>
         </Popover>
       </div>
+
+      <PreferencesDialog 
+        open={showPreferences} 
+        onOpenChange={setShowPreferences} 
+      />
     </div>
   );
 }

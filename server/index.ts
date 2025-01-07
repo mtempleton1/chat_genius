@@ -2,6 +2,8 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { setupAuth } from "./auth";
+import { db } from "@db";
+import { users } from "@db/schema";
 
 const app = express();
 app.use(express.json());
@@ -56,6 +58,10 @@ app.use((req, res, next) => {
 
 (async () => {
   try {
+    // Test database connection before starting the server
+    await db.select().from(users).limit(1);
+    log("Database connection successful");
+
     const server = registerRoutes(app);
 
     // Error handling middleware
@@ -103,6 +109,10 @@ app.use((req, res, next) => {
     await tryPort(5000);
   } catch (error) {
     console.error('Failed to start server:', error);
+    if (error instanceof Error) {
+      console.error('Error details:', error.message);
+      console.error('Stack trace:', error.stack);
+    }
     process.exit(1);
   }
 })();
