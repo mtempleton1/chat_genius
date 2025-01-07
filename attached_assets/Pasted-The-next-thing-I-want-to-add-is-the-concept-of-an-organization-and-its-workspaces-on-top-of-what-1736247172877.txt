@@ -1,0 +1,102 @@
+The next thing I want to add is the concept of an 'organization' and its 'workspaces' on top of what we have so far. I want the organization idea to replicate the structure of Slack. Since we already have the concept of members, messages and channels worked out, these new abstractions will be added and those will be changed so that they relate to the new abstractions correctly.
+
+Here is a detailed description of organizations, workspaces, channels and more in the Slack ecosystem. We are going to work step by step to achieve a very similar hierarchical structure. After this description will be a list of features we are going to try to add now as a first checkpoint. I don't expect everything in this description to be done immediately. I want to approach it slowly, adding piece by piece
+
+<description>
+
+The Slack chat application is designed to facilitate team collaboration and communication within organizations. Its organizational structure is hierarchical and modular, catering to diverse use cases and workflows. Here's a detailed breakdown of how organizations, channels, and other components relate within the Slack ecosystem:
+
+---
+
+### 1. **Organizations**
+In Slack, an organization typically represents a company, business unit, or group of users who collaborate together. Organizations are at the top of the Slack hierarchy and are defined by their **workspace(s)** and associated **members**.
+
+#### Key Features:
+- **Workspaces:** An organization can consist of a single workspace or multiple workspaces (e.g., in Slack Enterprise Grid).
+  - **Single Workspace:** Suitable for small to medium-sized teams where all communication happens in one place.
+  - **Enterprise Grid:** A structure for large organizations that links multiple interconnected workspaces, providing greater scalability and control.
+- **Members:** Users in an organization can have roles like admins, owners, and regular members. Admins manage permissions and settings, while owners have ultimate control over workspace policies.
+- **Domains:** Each organization has a unique Slack domain (e.g., `organization.slack.com`) that acts as an access point for its members.
+
+---
+
+### 2. **Channels**
+Channels are the primary communication units within Slack, existing within a specific workspace. They organize conversations by topics, teams, or projects.
+
+#### Types of Channels:
+1. **Public Channels:**
+   - Visible to all members of a workspace.
+   - Ideal for open discussions, announcements, or cross-team collaboration.
+   - Automatically searchable and discoverable by all workspace members.
+
+2. **Private Channels:**
+   - Restricted to invited members only.
+   - Used for confidential or focused discussions (e.g., leadership or sensitive project topics).
+   - Not discoverable in search or the channel directory.
+
+3. **Shared Channels (Connect):**
+   - Allow organizations to connect and collaborate with external organizations.
+   - Can be public or private, depending on the use case.
+
+4. **Multi-Channel Guest Access:**
+   - External users (e.g., contractors or clients) can be granted access to specific channels without becoming full workspace members.
+
+#### Hierarchical Organization:
+- Channels exist only within the context of a workspace and do not span across multiple workspaces unless explicitly shared via Slack Connect.
+- Channels are further organized with naming conventions (e.g., `#team-design`, `#project-alpha`).
+
+---
+
+### 3. **Slack Ecosystem Integration**
+The Slack ecosystem extends beyond basic communication, with features and integrations that support organizational workflows.
+
+#### Components of the Ecosystem:
+1. **Apps and Integrations:**
+   - Organizations can install apps like Google Drive, Jira, or Trello to enhance functionality.
+   - Custom apps and bots can be developed using the Slack API to meet unique organizational needs.
+
+2. **Workflows:**
+   - Workflow Builder allows organizations to automate routine tasks (e.g., onboarding new employees or collecting feedback).
+
+3. **Enterprise Features:**
+   - Slack Enterprise Grid provides unified security, compliance, and governance across multiple workspaces.
+   - Centralized user and app management, audit logs, and single sign-on (SSO).
+
+4. **Search and Archiving:**
+   - Robust search capabilities allow members to retrieve information from channels and direct messages.
+   - Message history and file storage policies are configurable based on organizational needs.
+
+5. **Slack Connect:**
+   - Enables seamless collaboration between organizations by sharing channels or direct messages with external parties.
+
+---
+
+### 4. **Relationship Between Organizations and Channels**
+- **Channels as Subunits:** Channels function as the building blocks of collaboration within a workspace, where specific discussions are isolated to improve clarity and focus.
+- **Cross-Workspace Interaction:** In Enterprise Grid, channels and their members can span multiple workspaces, enabling better collaboration across departments or regions.
+- **Governance:** Organization-wide admins can enforce policies at the channel level (e.g., retention settings, user permissions).
+
+---
+
+### 5. **Slack Ecosystem and Scalability**
+Slack's ecosystem is built to scale with an organization’s needs:
+- Small teams may use a single workspace with a few channels, while larger organizations leverage Enterprise Grid for hierarchical structure and multi-workspace flexibility.
+- Customization through integrations and APIs ensures that Slack adapts to various industries and workflows.
+- Advanced administrative controls and compliance tools make it viable for enterprise use.
+
+---
+
+By structuring organizations, channels, and the Slack ecosystem cohesively, Slack empowers teams to communicate effectively while maintaining scalability, flexibility, and control.
+
+</description>
+
+for our next goals we are going to work on the following:
+
+1. create 'organizations' and 'workspaces' tables with names and the bare minimum fields or attributes needed to relate to the other tables in the database.
+2. change the login page so that, rather than logging into the app as a whole, we are logging into particular workspaces. This change should be reflected in the url. For now we will allow any user to register and sign into any workspace. 
+3. if the user goes to the default login page (the login page we currently have), then additional input boxes are given for 'organization' and 'workspace', registering with those fields filled in will create new organizations and workspaces alongside the user.
+4. Once logged in, the user should now see the name of the workspace they are in rather than 'ChatGenius'.
+5. To the left of the channel list, much like in slack, there should now be another vertical sidebar with icons that allow you to change what appears in the main part of the app and the channel list. These icons should be: 'Home' (the default, which displays the channel list as we have it so far), 'DMs' (clicking this button should do nothing for now. we will add functionality to it later), 'Activity' (This button should also do nothing for now.)
+6. The channels that are listed should only be channels that are part of the workspace.
+7. When a user creates a channel it should be created only as part of the workspace.
+
