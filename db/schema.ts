@@ -29,13 +29,13 @@ export const workspaces = pgTable("workspaces", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-// Users table
+// Users table with explicit status field
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   username: text("username").unique().notNull(),
   password: text("password").notNull(),
   avatar: text("avatar"),
-  status: text("status").default("offline"),
+  status: text("status"),
   lastSeen: timestamp("last_seen").defaultNow(),
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -49,7 +49,7 @@ export const workspaceMembers = pgTable("workspace_members", {
   workspaceId: integer("workspace_id")
     .references(() => workspaces.id)
     .notNull(),
-  role: text("role").default("member"), // member, admin, owner
+  role: text("role").default("member"),
   joinedAt: timestamp("joined_at").defaultNow(),
 });
 

@@ -1,6 +1,5 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { setupAuth } from "./auth";
 import { setupWebSocket } from "./websocket";
 import { db } from "@db";
 import {
@@ -16,20 +15,6 @@ import {
 import { eq, and, asc, or, desc, isNull } from "drizzle-orm";
 import multer from "multer";
 import type { InferModel } from "drizzle-orm";
-
-// Type definitions
-type Workspace = InferModel<typeof workspaces>;
-type Organization = InferModel<typeof organizations>;
-type Channel = InferModel<typeof channels>;
-type Message = InferModel<typeof messages>;
-
-type WorkspaceWithOrg = Workspace & {
-  organization: Organization | null;
-};
-
-type ChannelWithWorkspace = Channel & {
-  workspace: WorkspaceWithOrg;
-};
 
 // Configure multer for file uploads
 const upload = multer({
@@ -48,15 +33,12 @@ export function registerRoutes(app: Express): Server {
   // Create HTTP server first
   const httpServer = createServer(app);
 
-  // Setup auth before other routes
-  setupAuth(app);
-
   // Setup WebSocket after creating HTTP server but before registering routes
   setupWebSocket(httpServer);
 
   // Add status update endpoint
   app.post("/api/user/status", async (req, res) => {
-    const user = req.user as Express.User;
+    const user = req.user;
     if (!user) return res.status(401).send("Not authenticated");
 
     const { status } = req.body;
@@ -80,7 +62,7 @@ export function registerRoutes(app: Express): Server {
 
   // Add endpoint to get user's workspaces
   app.get("/api/user/workspaces", async (req, res) => {
-    const user = req.user as Express.User;
+    const user = req.user;
     if (!user) return res.status(401).send("Not authenticated");
 
     try {
@@ -134,7 +116,7 @@ export function registerRoutes(app: Express): Server {
 
       // If user is authenticated, check membership
       if (req.user) {
-        const user = req.user as Express.User;
+        const user = req.user;
         const [member] = await db
           .select()
           .from(workspaceMembers)
@@ -179,7 +161,7 @@ export function registerRoutes(app: Express): Server {
 
   app.get("/api/workspaces/:workspaceId/channels", async (req, res) => {
     try {
-      const user = req.user as Express.User;
+      const user = req.user;
       if (!user) return res.status(401).send("Not authenticated");
 
       const workspaceId = parseInt(req.params.workspaceId);
@@ -218,7 +200,7 @@ export function registerRoutes(app: Express): Server {
   });
 
   app.post("/api/workspaces/:workspaceId/channels", async (req, res) => {
-    const user = req.user as Express.User;
+    const user = req.user;
     if (!user) return res.status(401).send("Not authenticated");
 
     const workspaceId = parseInt(req.params.workspaceId);
@@ -273,7 +255,7 @@ export function registerRoutes(app: Express): Server {
   app.get("/api/channels/:channelId/messages", async (req, res) => {
     console.log("ARE WE GETTTING HERERERERERERERE???????");
 
-    const user = req.user as Express.User;
+    const user = req.user;
     if (!user) return res.status(401).send("Not authenticated");
     const channelId = parseInt(req.params.channelId);
     if (isNaN(channelId)) {
@@ -358,7 +340,7 @@ export function registerRoutes(app: Express): Server {
 
   // Add file upload endpoint
   app.post("/api/upload", upload.single("file"), async (req, res) => {
-    const user = req.user as Express.User;
+    const user = req.user;
     if (!user) return res.status(401).send("Not authenticated");
     if (!req.file) return res.status(400).send("No file uploaded");
 
@@ -367,7 +349,7 @@ export function registerRoutes(app: Express): Server {
   });
 
   app.post("/api/organizations", async (req, res) => {
-    const user = req.user as Express.User;
+    const user = req.user;
     if (!user) return res.status(401).send("Not authenticated");
 
     const { name, domain } = req.body;
@@ -393,7 +375,7 @@ export function registerRoutes(app: Express): Server {
   });
 
   app.post("/api/workspaces", async (req, res) => {
-    const user = req.user as Express.User;
+    const user = req.user;
     if (!user) return res.status(401).send("Not authenticated");
 
     const { name, organizationId } = req.body;
@@ -413,7 +395,7 @@ export function registerRoutes(app: Express): Server {
   });
 
   app.get("/api/messages/:messageId/thread", async (req, res) => {
-    const user = req.user as Express.User;
+    const user = req.user;
     if (!user) return res.status(401).send("Not authenticated");
 
     const messageId = parseInt(req.params.messageId);
@@ -497,7 +479,7 @@ export function registerRoutes(app: Express): Server {
   });
 
   app.post("/api/messages", async (req, res) => {
-    const user = req.user as Express.User;
+    const user = req.user;
     if (!user) return res.status(401).send("Not authenticated");
 
     const { content, channelId, parentId } = req.body;
@@ -555,7 +537,7 @@ export function registerRoutes(app: Express): Server {
   });
 
   app.post("/api/messages/:messageId/reactions", async (req, res) => {
-    const user = req.user as Express.User;
+    const user = req.user;
     if (!user) return res.status(401).send("Not authenticated");
 
     const messageId = parseInt(req.params.messageId);
@@ -591,7 +573,7 @@ export function registerRoutes(app: Express): Server {
   app.delete(
     "/api/messages/:messageId/reactions/:reactionId",
     async (req, res) => {
-      const user = req.user as Express.User;
+      const user = req.user;
       if (!user) return res.status(401).send("Not authenticated");
 
       const messageId = parseInt(req.params.messageId);
@@ -649,7 +631,7 @@ export function registerRoutes(app: Express): Server {
   );
   // Add endpoint to update user's current workspace
   app.post("/api/user/workspace", async (req, res) => {
-    const user = req.user as Express.User;
+    const user = req.user;
     if (!user) return res.status(401).send("Not authenticated");
 
     const workspaceId = req.body.workspaceId;
