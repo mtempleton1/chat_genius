@@ -54,6 +54,33 @@ export function registerRoutes(app: Express): Server {
   // Setup WebSocket after creating HTTP server
   setupWebSocket(httpServer);
 
+  // Add new endpoint to get user's workspaces
+  app.get("/api/user/workspaces", async (req, res) => {
+    const user = req.user as Express.User;
+    if (!user) return res.status(401).send("Not authenticated");
+
+    try {
+      const userWorkspaces = await db
+        .select({
+          id: workspaces.id,
+          name: workspaces.name,
+          organizationId: workspaces.organizationId,
+          createdAt: workspaces.createdAt,
+          organization: organizations,
+          role: workspaceMembers.role,
+        })
+        .from(workspaceMembers)
+        .where(eq(workspaceMembers.userId, user.id))
+        .innerJoin(workspaces, eq(workspaceMembers.workspaceId, workspaces.id))
+        .leftJoin(organizations, eq(workspaces.organizationId, organizations.id));
+
+      res.json(userWorkspaces);
+    } catch (error) {
+      console.error("Error fetching user workspaces:", error);
+      res.status(500).send("Internal server error");
+    }
+  });
+
   app.get("/api/workspaces/:workspaceId", async (req, res) => {
     const workspaceId = parseInt(req.params.workspaceId);
     if (isNaN(workspaceId)) {
@@ -371,13 +398,13 @@ export function registerRoutes(app: Express): Server {
 
       const { workspace } = message[0];
 
-      // Verify workspace membership
+      // Verify workspace membership.  This is where the null check needs to be added.
       const [workspaceMember] = await db
         .select()
         .from(workspaceMembers)
         .where(
           and(
-            eq(workspaceMembers.workspaceId, workspace.id),
+            eq(workspaceMembers.workspaceId, workspace?.id), //Null check added here
             eq(workspaceMembers.userId, user.id),
           ),
         )
@@ -531,13 +558,50 @@ export function registerRoutes(app: Express): Server {
         return res.status(400).send("Invalid message or reaction ID");
       }
 
-      await db
-        .delete(reactions)
-        .where(
-          and(eq(reactions.id, reactionId), eq(reactions.userId, user.id)),
-        );
+      try {
+        const [message] = await db
+          .select({
+            message: messages,
+            channel: channels,
+            workspace: workspaces,
+          })
+          .from(messages)
+          .leftJoin(channels, eq(messages.channelId, channels.id))
+          .leftJoin(workspaces, eq(channels.workspaceId, workspaces.id))
+          .where(eq(messages.id, messageId))
+          .limit(1);
 
-      res.status(204).send();
+        if (!message?.workspace) {
+          return res.status(404).send("Message or workspace not found");
+        }
+
+        // Verify workspace membership
+        const [workspaceMember] = await db
+          .select()
+          .from(workspaceMembers)
+          .where(
+            and(
+              eq(workspaceMembers.workspaceId, message.workspace.id),
+              eq(workspaceMembers.userId, user.id),
+            ),
+          )
+          .limit(1);
+
+        if (!workspaceMember) {
+          return res.status(403).send("Not a member of this workspace");
+        }
+
+        await db
+          .delete(reactions)
+          .where(
+            and(eq(reactions.id, reactionId), eq(reactions.userId, user.id)),
+          );
+
+        res.status(204).send();
+      } catch (error) {
+        console.error("Error deleting reaction:", error);
+        res.status(500).send("Internal server error");
+      }
     },
   );
 
