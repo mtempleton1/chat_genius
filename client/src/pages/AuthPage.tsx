@@ -28,9 +28,9 @@ export default function AuthPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [location] = useLocation();
 
-  // Get workspace from URL if available
+  // Get workspace ID from URL if available
   const workspaceId = location.startsWith('/workspace/') 
-    ? parseInt(location.split('/')[2]) 
+    ? parseInt(location.split('/')[2], 10) 
     : undefined;
 
   // Fetch workspace details if workspaceId is present
@@ -46,13 +46,25 @@ export default function AuthPage() {
     const formData = new FormData(event.currentTarget);
     const username = formData.get("username") as string;
     const password = formData.get("password") as string;
-    const organization = formData.get("organization") as string;
-    const workspace = formData.get("workspace") as string;
 
     try {
+      // For registration in a specific workspace, ensure workspaceId is included
+      const registrationData = workspaceId 
+        ? { 
+            username, 
+            password, 
+            workspaceId // This will be properly typed as number since we parsed it above
+          }
+        : {
+            username,
+            password,
+            organization: formData.get("organization") as string,
+            workspace: formData.get("workspace") as string
+          };
+
       const result = isLogin 
         ? await login({ username, password, workspaceId })
-        : await register({ username, password, organization, workspace });
+        : await register(registrationData);
 
       if (!result.ok) {
         toast({

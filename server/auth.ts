@@ -39,21 +39,24 @@ const baseUserSchema = z.object({
 const newWorkspaceUserSchema = baseUserSchema.extend({
   organization: z.string().min(1, "Organization name is required"),
   workspace: z.string().min(1, "Workspace name is required"),
+  workspaceId: z.undefined(),
 });
 
 // Schema for registering with an existing workspace
 const existingWorkspaceUserSchema = baseUserSchema.extend({
   workspaceId: z.number(),
+  organization: z.undefined(),
+  workspace: z.undefined(),
 });
 
-// Type for the validated registration data
-type RegisterData = {
-  username: string;
-  password: string;
-  organization?: string;
-  workspace?: string;
-  workspaceId?: number;
-};
+// Type guard functions
+function isNewWorkspaceRegistration(data: any): data is z.infer<typeof newWorkspaceUserSchema> {
+  return 'organization' in data && 'workspace' in data;
+}
+
+function isExistingWorkspaceRegistration(data: any): data is z.infer<typeof existingWorkspaceUserSchema> {
+  return 'workspaceId' in data && typeof data.workspaceId === 'number';
+}
 
 // Base user type from database
 type BaseUser = {
@@ -152,22 +155,20 @@ export function setupAuth(app: Express) {
 
   app.post("/api/register", async (req, res, next) => {
     try {
-      let validatedData: RegisterData;
+      let validatedData: z.infer<typeof newWorkspaceUserSchema> | z.infer<typeof existingWorkspaceUserSchema>;
 
-      // Try validating as new workspace registration
-      const newWorkspaceResult = newWorkspaceUserSchema.safeParse(req.body);
-      if (newWorkspaceResult.success) {
-        validatedData = newWorkspaceResult.data;
-      } else {
-        // Try validating as existing workspace registration
-        const existingWorkspaceResult = existingWorkspaceUserSchema.safeParse(req.body);
-        if (existingWorkspaceResult.success) {
-          validatedData = existingWorkspaceResult.data;
-        } else {
-          return res
-            .status(400)
-            .send("Invalid input: Please provide either organization and workspace names or a workspace ID");
+      if ('workspaceId' in req.body && req.body.workspaceId) {
+        const result = existingWorkspaceUserSchema.safeParse(req.body);
+        if (!result.success) {
+          return res.status(400).send("Invalid input for workspace registration");
         }
+        validatedData = result.data;
+      } else {
+        const result = newWorkspaceUserSchema.safeParse(req.body);
+        if (!result.success) {
+          return res.status(400).send("Invalid input for new organization registration");
+        }
+        validatedData = result.data;
       }
 
       const { username, password } = validatedData;
@@ -195,7 +196,7 @@ export function setupAuth(app: Express) {
 
       let newWorkspaceId: number | undefined;
 
-      if ('workspaceId' in validatedData && validatedData.workspaceId) {
+      if (isExistingWorkspaceRegistration(validatedData)) {
         // Existing workspace registration
         const [workspace] = await db
           .select()
@@ -207,17 +208,16 @@ export function setupAuth(app: Express) {
           return res.status(404).send("Workspace not found");
         }
 
-        const [workspaceMember] = await db
+        await db
           .insert(workspaceMembers)
           .values({
             userId: newUser.id,
             workspaceId: validatedData.workspaceId,
             role: "member",
-          })
-          .returning();
+          });
 
         newWorkspaceId = validatedData.workspaceId;
-      } else if (validatedData.organization && validatedData.workspace) {
+      } else if (isNewWorkspaceRegistration(validatedData)) {
         // New workspace registration
         const [org] = await db
           .insert(organizations)
@@ -229,14 +229,13 @@ export function setupAuth(app: Express) {
           .values({ name: validatedData.workspace, organizationId: org.id })
           .returning();
 
-        const [workspaceMember] = await db
+        await db
           .insert(workspaceMembers)
           .values({
             userId: newUser.id,
             workspaceId: ws.id,
             role: "owner",
-          })
-          .returning();
+          });
 
         newWorkspaceId = ws.id;
       }
@@ -247,8 +246,8 @@ export function setupAuth(app: Express) {
         if (err) return next(err);
         return res.json({
           message: "Registration successful",
-          user: { 
-            id: newUser.id, 
+          user: {
+            id: newUser.id,
             username: newUser.username,
             workspaceId: newWorkspaceId
           },
@@ -260,7 +259,6 @@ export function setupAuth(app: Express) {
   });
 
   app.post("/api/login", (req, res, next) => {
-    // For login, we'll accept either format
     const loginData = z.object({
       username: z.string().min(1, "Username is required"),
       password: z.string().min(1, "Password is required"),
@@ -273,36 +271,36 @@ export function setupAuth(app: Express) {
         .send("Invalid input: " + loginData.error.issues.map(i => i.message).join(", "));
     }
 
-    const { username, password, workspaceId } = loginData.data;
-
     passport.authenticate("local", async (err: any, user: Express.User, info: IVerifyOptions) => {
       if (err) return next(err);
       if (!user) return res.status(400).send(info.message ?? "Login failed");
 
       // If workspaceId is provided, verify membership
-      if (workspaceId) {
-        const member = await db.query.workspaceMembers.findFirst({
-          where: and(
+      if (loginData.data.workspaceId) {
+        const [member] = await db
+          .select()
+          .from(workspaceMembers)
+          .where(and(
             eq(workspaceMembers.userId, user.id),
-            eq(workspaceMembers.workspaceId, workspaceId)
-          ),
-        });
+            eq(workspaceMembers.workspaceId, loginData.data.workspaceId)
+          ))
+          .limit(1);
 
         if (!member) {
           return res.status(403).send("Not a member of this workspace");
         }
 
-        user.workspaceId = workspaceId;
+        user.workspaceId = loginData.data.workspaceId;
       }
 
       req.logIn(user, (err) => {
         if (err) return next(err);
         return res.json({
           message: "Login successful",
-          user: { 
-            id: user.id, 
+          user: {
+            id: user.id,
             username: user.username,
-            workspaceId: user.workspaceId 
+            workspaceId: user.workspaceId
           },
         });
       });

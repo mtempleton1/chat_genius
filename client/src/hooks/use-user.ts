@@ -34,6 +34,7 @@ type RegisterData = {
   password: string;
   organization?: string;
   workspace?: string;
+  workspaceId?: number;
 };
 
 async function handleRequest(

@@ -36,10 +36,11 @@ const upload = multer({
 });
 
 export function registerRoutes(app: Express): Server {
-  setupAuth(app);
-
   const httpServer = createServer(app);
   setupWebSocket(httpServer);
+
+  // Important: Setup auth before other routes to ensure proper session handling
+  setupAuth(app);
 
   app.get("/api/workspaces/:workspaceId", async (req, res) => {
     const workspaceId = parseInt(req.params.workspaceId);
