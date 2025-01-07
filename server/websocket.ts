@@ -84,13 +84,22 @@ export function setupWebSocket(server: HttpServer) {
               .where(eq(users.id, ws.userId))
               .limit(1);
 
-            // Prepare message data
-            console.log("PREPARINGGGGG MESSGSGSGS");
-            console.log(data);
+            // Create message in database first
+            const [newMessage] = await db
+              .insert(messages)
+              .values({
+                content: data.content,
+                channelId: data.channelId,
+                userId: ws.userId,
+                parentId: data.parentId,
+              })
+              .returning();
+
+            // Prepare message data with actual message ID
             const messageData = {
               type: "message",
-              id: data.messageId,
-              messageId: data.messageId,
+              id: newMessage.id,
+              messageId: newMessage.id,
               channelId: data.channelId,
               content: data.content,
               userId: ws.userId,
