@@ -11,19 +11,19 @@ interface Client extends WebSocket {
 }
 
 export function setupWebSocket(server: HttpServer) {
-  const wss = new WebSocketServer({ 
+  const wss = new WebSocketServer({
     noServer: true,
-    clientTracking: true
+    clientTracking: true,
   });
 
-  server.on('upgrade', (request, socket, head) => {
-    if (request.headers['sec-websocket-protocol'] === 'vite-hmr') {
+  server.on("upgrade", (request, socket, head) => {
+    if (request.headers["sec-websocket-protocol"] === "vite-hmr") {
       socket.destroy();
       return;
     }
 
     wss.handleUpgrade(request, socket, head, (ws) => {
-      wss.emit('connection', ws, request);
+      wss.emit("connection", ws, request);
     });
   });
 
@@ -36,7 +36,7 @@ export function setupWebSocket(server: HttpServer) {
   wss.on("connection", (ws: Client) => {
     ws.isAlive = true;
     ws.channels = new Set();
-    ws.on('pong', heartbeat);
+    ws.on("pong", heartbeat);
 
     ws.on("message", async (message: string) => {
       try {
@@ -64,10 +64,12 @@ export function setupWebSocket(server: HttpServer) {
             });
 
             // Send confirmation back to client
-            ws.send(JSON.stringify({ 
-              type: "auth_success",
-              userId: data.userId
-            }));
+            ws.send(
+              JSON.stringify({
+                type: "auth_success",
+                userId: data.userId,
+              }),
+            );
 
             broadcastUserStatus(data.userId, "online");
             break;
@@ -93,16 +95,18 @@ export function setupWebSocket(server: HttpServer) {
               parentId: data.parentId,
               user: messageUser,
               createdAt: new Date().toISOString(),
-              reactions: []
+              reactions: [],
             };
             broadcastToChannel(data.channelId, messageData);
 
             // Send confirmation back to sender
-            ws.send(JSON.stringify({
-              type: "message_sent",
-              channelId: data.channelId,
-              content: data.content
-            }));
+            ws.send(
+              JSON.stringify({
+                type: "message_sent",
+                channelId: data.channelId,
+                content: data.content,
+              }),
+            );
             break;
 
           case "typing":
@@ -117,10 +121,12 @@ export function setupWebSocket(server: HttpServer) {
         }
       } catch (error) {
         console.error("WebSocket message error:", error);
-        ws.send(JSON.stringify({
-          type: "error",
-          message: "Failed to process message"
-        }));
+        ws.send(
+          JSON.stringify({
+            type: "error",
+            message: "Failed to process message",
+          }),
+        );
       }
     });
 
@@ -156,7 +162,7 @@ export function setupWebSocket(server: HttpServer) {
     });
   }, 30000);
 
-  wss.on('close', () => {
+  wss.on("close", () => {
     clearInterval(interval);
   });
 
@@ -167,10 +173,15 @@ export function setupWebSocket(server: HttpServer) {
       .where(eq(channelMembers.channelId, channelId));
 
     const data = JSON.stringify(message);
-
+    console.log("IN BROADCAST TO CHANNEL");
+    console.log(data);
     channelMemberIds.forEach(({ userId }) => {
       const client = clients.get(userId);
+      console.log("HERE");
+      // console.log(client);
+      console.log(client?.readyState, WebSocket.OPEN);
       if (client?.readyState === WebSocket.OPEN) {
+        console.log("SSECINDG....");
         client.send(data);
       }
     });
