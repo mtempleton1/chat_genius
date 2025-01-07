@@ -228,15 +228,15 @@ export function registerRoutes(app: Express): Server {
       .returning();
 
     // Get all workspace members
-    const workspaceMembers = await db
+    const members = await db
       .select()
       .from(workspaceMembers)
       .where(eq(workspaceMembers.workspaceId, workspaceId));
 
     // Add all workspace members to the channel
-    if (workspaceMembers.length > 0) {
+    if (members.length > 0) {
       await db.insert(channelMembers).values(
-        workspaceMembers.map(member => ({
+        members.map(member => ({
           channelId: channel.id,
           userId: member.userId,
         }))
