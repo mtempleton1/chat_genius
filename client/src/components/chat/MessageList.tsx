@@ -32,11 +32,17 @@ export default function MessageList({ channelId, onThreadSelect }: MessageListPr
     if (!channelId) return;
 
     return addMessageHandler((msg) => {
-      if (msg.type === "message" && msg.channelId === channelId) {
+      if ((msg.type === "message" || msg.type === "thread_message") && 
+          msg.channelId === channelId && 
+          !msg.parentId) {  // Only show non-thread messages in main channel
         queryClient.setQueryData<Message[]>(
           [`/api/channels/${channelId}/messages`],
           (oldMessages) => {
             if (!oldMessages) return [msg];
+            // Avoid duplicate messages
+            if (oldMessages.some(m => m.id === (msg.id || msg.messageId))) {
+              return oldMessages;
+            }
             return [...oldMessages, {
               id: msg.id || msg.messageId,
               content: msg.content,
