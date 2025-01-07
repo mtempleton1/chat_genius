@@ -11,6 +11,19 @@ import WorkspaceSelector from "@/components/chat/WorkspaceSelector";
 import { useUser } from "@/hooks/use-user";
 import { Loader2 } from "lucide-react";
 
+type Channel = {
+  id: number;
+  name: string;
+  workspaceId: number;
+  isPrivate: boolean;
+  createdById: number;
+  createdAt?: string;
+  members?: Array<{
+    userId: number;
+    role: string;
+  }>;
+};
+
 type Workspace = {
   id: number;
   name: string;
@@ -49,7 +62,7 @@ export default function ChatPage() {
   });
 
   // Query for channels when workspace is selected
-  const { data: channels } = useQuery({
+  const { data: channels } = useQuery<Channel[]>({
     queryKey: [`/api/workspaces/${workspaceId}/channels`],
     enabled: !!workspaceId,
   });

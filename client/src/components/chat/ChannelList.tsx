@@ -14,32 +14,45 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import type { Channel } from "@db/schema";
 import { cn } from "@/lib/utils";
-import { useUser } from "@/hooks/use-user";
+
+type Channel = {
+  id: number;
+  name: string;
+  workspaceId: number;
+  isPrivate: boolean;
+  createdById: number;
+  createdAt?: string;
+  members?: Array<{
+    userId: number;
+    role: string;
+  }>;
+};
 
 type ChannelListProps = {
   selectedChannelId: number | null;
   onSelectChannel: (channelId: number) => void;
+  workspaceId: number;
+  channels?: Channel[];
 };
 
-export default function ChannelList({ selectedChannelId, onSelectChannel }: ChannelListProps) {
+export default function ChannelList({ 
+  selectedChannelId, 
+  onSelectChannel, 
+  workspaceId,
+  channels: initialChannels 
+}: ChannelListProps) {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const { user } = useUser();
 
-  const workspaceId = user?.workspaceId;
-
-  const { data: channels } = useQuery<Channel[]>({
+  const { data: channels = initialChannels } = useQuery<Channel[]>({
     queryKey: [`/api/workspaces/${workspaceId}/channels`],
     enabled: !!workspaceId,
   });
 
   const createChannel = useMutation({
     mutationFn: async (data: { name: string; isPrivate: boolean }) => {
-      if (!workspaceId) throw new Error("No workspace selected");
-
       const response = await fetch(`/api/workspaces/${workspaceId}/channels`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -78,8 +91,6 @@ export default function ChannelList({ selectedChannelId, onSelectChannel }: Chan
       isPrivate: formData.get("private") === "on",
     });
   };
-
-  if (!workspaceId) return null;
 
   return (
     <div className="h-full flex flex-col p-4 border-r">

@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Select,
   SelectContent,
@@ -7,6 +7,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Loader2 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 type Workspace = {
   id: number;
@@ -24,9 +25,56 @@ type WorkspaceSelectorProps = {
 };
 
 export default function WorkspaceSelector({ onSelect }: WorkspaceSelectorProps) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
   const { data: workspaces, isLoading, error } = useQuery<Workspace[]>({
     queryKey: ['/api/user/workspaces'],
   });
+
+  // Add mutation for setting workspace
+  const setWorkspace = useMutation({
+    mutationFn: async (workspaceId: number) => {
+      const response = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: (queryClient.getQueryData(['user']) as any)?.username,
+          password: '',  // Not needed for workspace update
+          workspaceId
+        }),
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(['user'], (old: any) => ({
+        ...old,
+        workspaceId: data.user.workspaceId,
+      }));
+    },
+    onError: (error) => {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to switch workspace',
+        variant: 'destructive',
+      });
+    },
+  });
+
+  const handleSelect = async (workspaceId: string) => {
+    const id = parseInt(workspaceId, 10);
+    try {
+      await setWorkspace.mutateAsync(id);
+      onSelect(id);
+    } catch (error) {
+      // Error is handled in mutation
+    }
+  };
 
   if (isLoading) {
     return (
@@ -56,7 +104,7 @@ export default function WorkspaceSelector({ onSelect }: WorkspaceSelectorProps) 
   }
 
   return (
-    <Select onValueChange={(value) => onSelect(parseInt(value, 10))}>
+    <Select onValueChange={handleSelect}>
       <SelectTrigger className="w-[300px]">
         <SelectValue placeholder="Select a workspace" />
       </SelectTrigger>
