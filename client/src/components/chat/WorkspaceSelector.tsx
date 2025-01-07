@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Select,
@@ -30,11 +29,26 @@ export default function WorkspaceSelector({ onSelect }: WorkspaceSelectorProps) 
   });
 
   if (isLoading) {
-    return <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />;
+    return (
+      <div className="flex items-center gap-2">
+        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        <span className="text-muted-foreground">Loading workspaces...</span>
+      </div>
+    );
   }
 
   if (error) {
-    return <div className="text-destructive">Failed to load workspaces</div>;
+    return (
+      <div className="text-destructive flex items-center gap-2">
+        <span>Failed to load workspaces</span>
+        <button 
+          onClick={() => window.location.reload()} 
+          className="text-sm underline hover:text-destructive/90"
+        >
+          Retry
+        </button>
+      </div>
+    );
   }
 
   if (!workspaces?.length) {
@@ -43,19 +57,26 @@ export default function WorkspaceSelector({ onSelect }: WorkspaceSelectorProps) 
 
   return (
     <Select onValueChange={(value) => onSelect(parseInt(value, 10))}>
-      <SelectTrigger className="w-[250px]">
+      <SelectTrigger className="w-[300px]">
         <SelectValue placeholder="Select a workspace" />
       </SelectTrigger>
       <SelectContent>
         {workspaces.map((workspace) => (
-          <SelectItem key={workspace.id} value={workspace.id.toString()}>
-            <span className="flex items-center gap-2">
-              {workspace.name}
+          <SelectItem 
+            key={workspace.id} 
+            value={workspace.id.toString()}
+            className="flex items-center justify-between"
+          >
+            <div className="flex flex-col">
+              <span className="font-medium">{workspace.name}</span>
               {workspace.organization && (
                 <span className="text-xs text-muted-foreground">
-                  ({workspace.organization.name})
+                  {workspace.organization.name}
                 </span>
               )}
+            </div>
+            <span className="text-xs capitalize text-muted-foreground">
+              {workspace.role}
             </span>
           </SelectItem>
         ))}

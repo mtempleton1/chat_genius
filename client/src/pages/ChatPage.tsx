@@ -23,13 +23,12 @@ type Workspace = {
   };
 };
 
-type UserPresenceProps = {
+type UserPresenceData = {
   id: number;
   username: string;
   status?: string | null;
   avatar?: string | null;
   lastSeen?: Date | null;
-  createdAt?: Date | null;
 };
 
 export default function ChatPage() {
@@ -52,17 +51,19 @@ export default function ChatPage() {
   if (!user) return null;
 
   // Prepare user data for UserPresence component
-  const userPresenceData: UserPresenceProps = {
+  const userPresenceData: UserPresenceData = {
     id: user.id,
     username: user.username,
     avatar: user.avatar || null,
     status: user.status || null,
-    lastSeen: user.lastSeen || null,
-    createdAt: user.createdAt || null
+    lastSeen: user.lastSeen || null
   };
 
   const handleWorkspaceSelect = (selectedWorkspaceId: number) => {
     setLocation(`/workspace/${selectedWorkspaceId}`);
+    // Reset selected channel and thread when switching workspaces
+    setSelectedChannelId(null);
+    setSelectedThreadId(null);
   };
 
   // Only show loading state when we're waiting for a specific workspace
@@ -79,7 +80,14 @@ export default function ChatPage() {
       <header className="border-b px-4 py-3 bg-background">
         <div className="flex items-center justify-between">
           {workspace ? (
-            <h1 className="text-xl font-semibold">{workspace.name}</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl font-semibold">{workspace.name}</h1>
+              {workspace.organization && (
+                <span className="text-sm text-muted-foreground">
+                  ({workspace.organization.name})
+                </span>
+              )}
+            </div>
           ) : (
             <WorkspaceSelector onSelect={handleWorkspaceSelect} />
           )}
