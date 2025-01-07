@@ -49,7 +49,7 @@ export function registerRoutes(app: Express): Server {
     try {
       const [updatedUser] = await db
         .update(users)
-        .set({ status })
+        .set({ status, lastSeen: new Date() })
         .where(eq(users.id, user.id))
         .returning();
 
@@ -629,14 +629,14 @@ export function registerRoutes(app: Express): Server {
       }
     },
   );
-  // Add endpoint to update user's current workspace
+  // Update user's current workspace
   app.post("/api/user/workspace", async (req, res) => {
     const user = req.user;
     if (!user) return res.status(401).send("Not authenticated");
 
-    const workspaceId = req.body.workspaceId;
-    if (!workspaceId) {
-      return res.status(400).send("Workspace ID is required");
+    const workspaceId = parseInt(req.body.workspaceId);
+    if (!workspaceId || isNaN(workspaceId)) {
+      return res.status(400).send("Valid workspace ID is required");
     }
 
     try {
@@ -657,7 +657,9 @@ export function registerRoutes(app: Express): Server {
       }
 
       // Update the session with new workspace ID
-      req.user.workspaceId = workspaceId;
+      if (req.user) {
+        req.user.workspaceId = workspaceId;
+      }
 
       return res.json({
         message: "Workspace updated successfully",

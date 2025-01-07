@@ -31,18 +31,18 @@ export default function UserPresence({ user }: UserPresenceProps) {
       <DropdownMenuTrigger className="focus:outline-none">
         <div className="flex items-center gap-2">
           <Avatar>
-            <AvatarImage src={user.avatar} alt={user.username} />
+            {user.avatar && <AvatarImage src={user.avatar} alt={user.username} />}
             <AvatarFallback>{user.username[0].toUpperCase()}</AvatarFallback>
           </Avatar>
           <div className="text-sm">
             <div className="font-medium">{user.username}</div>
             <div className="text-xs text-muted-foreground">
-              {user.status === "online" ? "Active" : "Away"}
+              {user.status || "Away"}
             </div>
           </div>
         </div>
       </DropdownMenuTrigger>
-      
+
       <DropdownMenuContent align="end">
         <DropdownMenuItem onClick={() => logout()}>
           Log out

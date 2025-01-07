@@ -73,19 +73,34 @@ app.use((req, res, next) => {
       serveStatic(app);
     }
 
-    // Start server on port 5000
-    const PORT = 5000;
-    server.listen(PORT, "0.0.0.0", () => {
-      log(`Server started on port ${PORT}`);
-    }).on('error', (error: NodeJS.ErrnoException) => {
-      if (error.code === 'EADDRINUSE') {
-        console.error(`Port ${PORT} is already in use. Please ensure no other instance of the server is running.`);
-        process.exit(1);
-      } else {
-        console.error('Server error:', error);
-        process.exit(1);
+    // Try different ports if the default port is in use
+    const tryPort = async (port: number): Promise<void> => {
+      try {
+        await new Promise<void>((resolve, reject) => {
+          server.listen(port, "0.0.0.0", () => {
+            log(`Server started on port ${port}`);
+            resolve();
+          }).on('error', (error: NodeJS.ErrnoException) => {
+            if (error.code === 'EADDRINUSE') {
+              // Port is in use, reject to try next port
+              reject(new Error(`Port ${port} is in use`));
+            } else {
+              console.error('Server error:', error);
+              process.exit(1);
+            }
+          });
+        });
+      } catch (error) {
+        if (port < 5010) { // Try up to port 5010
+          await tryPort(port + 1);
+        } else {
+          throw error;
+        }
       }
-    });
+    };
+
+    // Start with port 5000 and try alternatives if needed
+    await tryPort(5000);
   } catch (error) {
     console.error('Failed to start server:', error);
     process.exit(1);
