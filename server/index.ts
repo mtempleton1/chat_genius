@@ -51,31 +51,39 @@ app.use((req, res, next) => {
 });
 
 (async () => {
-  const PORT = 5000; // Changed back to port 5000 as per development guidelines
-  const server = registerRoutes(app);
+  try {
+    const server = registerRoutes(app);
 
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-    const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
-    console.error(err);
-    res.status(status).json({ message });
-  });
+    // Error handling middleware
+    app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+      console.error('Server error:', err);
+      const status = err.status || err.statusCode || 500;
+      const message = err.message || "Internal Server Error";
+      res.status(status).json({ message });
+    });
 
-  if (app.get("env") === "development") {
-    await setupVite(app, server);
-  } else {
-    serveStatic(app);
-  }
-
-  server.listen(PORT, "0.0.0.0", () => {
-    log(`Server started on port ${PORT}`);
-  }).on('error', (error: NodeJS.ErrnoException) => {
-    if (error.code === 'EADDRINUSE') {
-      console.error(`Port ${PORT} is already in use. Please ensure no other instance of the server is running.`);
-      process.exit(1);
+    // Setup Vite or static serving based on environment
+    if (app.get("env") === "development") {
+      await setupVite(app, server);
     } else {
-      console.error('Server error:', error);
-      process.exit(1);
+      serveStatic(app);
     }
-  });
+
+    // Start server on port 5000
+    const PORT = 5000;
+    server.listen(PORT, "0.0.0.0", () => {
+      log(`Server started on port ${PORT}`);
+    }).on('error', (error: NodeJS.ErrnoException) => {
+      if (error.code === 'EADDRINUSE') {
+        console.error(`Port ${PORT} is already in use. Please ensure no other instance of the server is running.`);
+        process.exit(1);
+      } else {
+        console.error('Server error:', error);
+        process.exit(1);
+      }
+    });
+  } catch (error) {
+    console.error('Failed to start server:', error);
+    process.exit(1);
+  }
 })();

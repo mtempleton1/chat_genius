@@ -11,6 +11,7 @@ type MessageHandler = {
   id: string;
   scope: string;
   handler: (message: WebSocketMessage) => void;
+  isPersistent?: boolean;
 };
 
 export function useWebSocket() {
@@ -40,7 +41,7 @@ export function useWebSocket() {
     const ws = new WebSocket(wsUrl);
 
     ws.onopen = () => {
-      console.log("WebSocket connected");
+      console.log("WebSocket connected, authenticating...");
       ws.send(JSON.stringify({ type: "auth", userId: user.id }));
       reconnectAttemptsRef.current = 0;
       isConnectingRef.current = false;
@@ -61,13 +62,22 @@ export function useWebSocket() {
           return;
         }
 
-        // Process all handlers for every message, let them decide if they should handle it
-        messageHandlersRef.current.forEach(({ handler, scope }) => {
+        // Handle messages based on type
+        const relevantHandlers = messageHandlersRef.current.filter((handler) => {
+          if (message.type === "message" && handler.scope.startsWith("channel-")) {
+            return true;
+          }
+          if (message.type === "thread_message" && handler.scope.startsWith("thread-")) {
+            return true;
+          }
+          return false;
+        });
+
+        relevantHandlers.forEach(({ handler }) => {
           try {
-            console.log(`Calling handler for scope: ${scope}`);
             handler(message);
-          } catch (handlerError) {
-            console.error(`Handler error for scope ${scope}:`, handlerError);
+          } catch (error) {
+            console.error("Handler error:", error);
           }
         });
       } catch (error) {
@@ -94,9 +104,7 @@ export function useWebSocket() {
         console.log(
           `Attempting to reconnect in ${timeout}ms (attempt ${reconnectAttemptsRef.current}/${maxReconnectAttempts})`,
         );
-        reconnectTimeoutRef.current = setTimeout(() => {
-          connect();
-        }, timeout);
+        reconnectTimeoutRef.current = setTimeout(connect, timeout);
       } else if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
         toast({
           title: "Connection Error",
@@ -109,7 +117,7 @@ export function useWebSocket() {
 
     ws.onerror = (error) => {
       console.error("WebSocket error:", error);
-      isConnectingRef.current = false;
+      // Let onclose handle the cleanup and reconnection
     };
 
     wsRef.current = ws;
@@ -137,8 +145,7 @@ export function useWebSocket() {
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
       }
-      if (wsRef.current) {
-        console.log("Cleaning up WebSocket connection");
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
         wsRef.current.close();
       }
     };
@@ -146,20 +153,20 @@ export function useWebSocket() {
 
   const sendMessage = useCallback(
     (message: WebSocketMessage) => {
-      if (wsRef.current?.readyState === WebSocket.OPEN) {
-        console.log("Sending WebSocket message:", message);
-        wsRef.current.send(JSON.stringify(message));
-      } else {
-        console.log("WebSocket not ready, attempting reconnection");
-        if (!wsRef.current || wsRef.current.readyState === WebSocket.CLOSED) {
-          connect();
+      const trySendMessage = () => {
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+          console.log("Sending WebSocket message:", message);
+          wsRef.current.send(JSON.stringify(message));
+          return true;
         }
-        // Wait for connection and retry sending
+        return false;
+      };
+
+      if (!trySendMessage()) {
+        console.log("WebSocket not ready, attempting reconnection");
+        connect();
         setTimeout(() => {
-          if (wsRef.current?.readyState === WebSocket.OPEN) {
-            console.log("Retrying WebSocket message:", message);
-            wsRef.current.send(JSON.stringify(message));
-          } else {
+          if (!trySendMessage()) {
             console.error("Failed to send WebSocket message after retry");
             toast({
               title: "Connection Error",
@@ -174,34 +181,26 @@ export function useWebSocket() {
   );
 
   const addMessageHandler = useCallback(
-    (
-      handler: (message: WebSocketMessage) => void,
-      scope: string = "global",
-    ) => {
+    (handler: (message: WebSocketMessage) => void, scope: string = "global") => {
       const handlerId = Math.random().toString(36).substring(7);
+      const isPersistent = scope.startsWith("channel-");
+
       console.log(
-        `Adding new WebSocket message handler (${handlerId}) for scope: ${scope}`,
+        `Adding new WebSocket message handler (${handlerId}) for scope: ${scope}, isPersistent: ${isPersistent}`,
       );
 
-      // Check for existing handlers with the same scope
-      const existingHandlerIndex = messageHandlersRef.current.findIndex(
-        (h) => h.scope === scope
+      // Remove existing non-persistent handler with the same scope
+      messageHandlersRef.current = messageHandlersRef.current.filter(
+        (h) => !(h.scope === scope && !h.isPersistent)
       );
 
-      // Update or add the handler
-      const newHandler = {
+      // Add the new handler
+      messageHandlersRef.current.push({
         id: handlerId,
         scope,
         handler,
-      };
-
-      if (existingHandlerIndex !== -1) {
-        // Update existing handler
-        messageHandlersRef.current[existingHandlerIndex] = newHandler;
-      } else {
-        // Add new handler
-        messageHandlersRef.current.push(newHandler);
-      }
+        isPersistent,
+      });
 
       // Log current handlers for debugging
       console.log(
@@ -209,26 +208,33 @@ export function useWebSocket() {
         messageHandlersRef.current.map((h) => ({
           id: h.id,
           scope: h.scope,
+          isPersistent: h.isPersistent,
         })),
       );
 
-      // Return cleanup function that only removes this specific handler
+      // Return cleanup function that only removes non-persistent handlers
       return () => {
-        console.log(
-          `Removing WebSocket message handler (${handlerId}) from scope: ${scope}`,
-        );
-        messageHandlersRef.current = messageHandlersRef.current.filter(
-          (h) => h.id !== handlerId
-        );
+        if (!isPersistent) {
+          console.log(
+            `Removing non-persistent handler (${handlerId}) for scope: ${scope}`,
+          );
+          messageHandlersRef.current = messageHandlersRef.current.filter(
+            (h) => h.id !== handlerId
+          );
 
-        // Log remaining handlers
-        console.log(
-          "Remaining handlers:",
-          messageHandlersRef.current.map((h) => ({
-            id: h.id,
-            scope: h.scope,
-          })),
-        );
+          console.log(
+            "Remaining handlers:",
+            messageHandlersRef.current.map((h) => ({
+              id: h.id,
+              scope: h.scope,
+              isPersistent: h.isPersistent,
+            })),
+          );
+        } else {
+          console.log(
+            `Skipping removal of persistent handler (${handlerId}) for scope: ${scope}`,
+          );
+        }
       };
     },
     [],

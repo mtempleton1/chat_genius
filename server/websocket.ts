@@ -1,7 +1,7 @@
 import { Server as HttpServer } from "http";
 import { WebSocket, WebSocketServer } from "ws";
 import { db } from "@db";
-import { users, channelMembers, messages } from "@db/schema";
+import { users, channelMembers } from "@db/schema";
 import { eq } from "drizzle-orm";
 
 interface Client extends WebSocket {
@@ -16,16 +16,30 @@ export function setupWebSocket(server: HttpServer) {
     clientTracking: true,
   });
 
-  server.on("upgrade", (request, socket, head) => {
-    // Skip handling Vite HMR requests
-    if (request.headers["sec-websocket-protocol"] === "vite-hmr") {
-      socket.destroy();
-      return;
-    }
+  let isInitialized = false;
 
-    wss.handleUpgrade(request, socket, head, (ws) => {
-      wss.emit("connection", ws, request);
-    });
+  // Handle upgrade events
+  server.on("upgrade", (request, socket, head) => {
+    try {
+      // Skip handling Vite HMR requests
+      if (request.headers["sec-websocket-protocol"] === "vite-hmr") {
+        socket.destroy();
+        return;
+      }
+
+      if (!isInitialized) {
+        console.log("WebSocket server not yet initialized");
+        socket.destroy();
+        return;
+      }
+
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        wss.emit("connection", ws, request);
+      });
+    } catch (error) {
+      console.error("WebSocket upgrade error:", error);
+      socket.destroy();
+    }
   });
 
   const clients = new Map<number, Client>();
@@ -43,6 +57,7 @@ export function setupWebSocket(server: HttpServer) {
     ws.on("message", async (message: string) => {
       try {
         const data = JSON.parse(message);
+        console.log("WebSocket received message:", data);
 
         switch (data.type) {
           case "auth":
@@ -71,55 +86,33 @@ export function setupWebSocket(server: HttpServer) {
               JSON.stringify({
                 type: "auth_success",
                 userId: data.userId,
-              }),
+              })
             );
 
             broadcastUserStatus(data.userId, "online");
             break;
 
           case "message":
-            if (!ws.userId || !data.newMessage?.channelId) break;
-            console.log("Received message:", data);
+          case "thread_message":
+            if (!ws.userId || !data.channelId) break;
+            console.log(`Broadcasting ${data.type}:`, data);
 
-            const channelId = data.newMessage.channelId;
-            const parentId = data.newMessage.parentId;
-
-            // If this is a thread message
-            if (parentId) {
-              // Broadcast to channel members with thread_message type
-              broadcastToChannel(channelId, {
-                type: "thread_message",
-                messageId: data.newMessage.id,
-                channelId: channelId,
-                parentId: parentId,
-                content: data.newMessage.content,
-                userId: data.newMessage.userId,
-                user: data.newMessage.user,
-                attachments: data.newMessage.attachments,
-                createdAt: data.newMessage.createdAt
-              });
-            }
-
-            // Always broadcast channel message (for thread count updates)
-            broadcastToChannel(channelId, {
-              type: "message",
-              channelId: channelId,
-              newMessage: data.newMessage
-            });
+            // Broadcast the message to all clients in the channel
+            broadcastToChannel(data.channelId, data);
 
             // Send confirmation back to sender
             ws.send(
               JSON.stringify({
                 type: "message_sent",
-                channelId: channelId,
-                content: data.newMessage.content,
-              }),
+                channelId: data.channelId,
+                messageId: data.messageId || data.newMessage?.id,
+                parentId: data.parentId,
+              })
             );
             break;
 
           case "typing":
             if (!ws.userId || !data.channelId) break;
-
             broadcastToChannel(data.channelId, {
               type: "typing",
               userId: ws.userId,
@@ -133,7 +126,7 @@ export function setupWebSocket(server: HttpServer) {
           JSON.stringify({
             type: "error",
             message: "Failed to process message",
-          }),
+          })
         );
       }
     });
@@ -157,7 +150,7 @@ export function setupWebSocket(server: HttpServer) {
     });
   });
 
-  // Heartbeat interval to check connection status
+  // Heartbeat interval
   const interval = setInterval(() => {
     wss.clients.forEach((ws: Client) => {
       if (ws.isAlive === false) {
@@ -208,4 +201,8 @@ export function setupWebSocket(server: HttpServer) {
       }
     });
   }
+
+  // Mark WebSocket server as initialized
+  isInitialized = true;
+  console.log("WebSocket server initialized successfully");
 }

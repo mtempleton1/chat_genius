@@ -45,13 +45,13 @@ const upload = multer({
 });
 
 export function registerRoutes(app: Express): Server {
-  // Important: Create HTTP server first
+  // Create HTTP server first
   const httpServer = createServer(app);
 
-  // Important: Setup auth before other routes to ensure proper session handling
+  // Setup auth before other routes
   setupAuth(app);
 
-  // Setup WebSocket after creating HTTP server
+  // Setup WebSocket after creating HTTP server but before registering routes
   setupWebSocket(httpServer);
 
   // Add endpoint to get user's workspaces

@@ -34,6 +34,7 @@ export default function MessageList({
   const { addMessageHandler, sendMessage: sendWebSocketMessage } = useWebSocket();
   const scrollRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
+  const cleanupRef = useRef<(() => void) | null>(null);
 
   // Auto-scroll when new messages arrive
   useEffect(() => {
@@ -43,66 +44,71 @@ export default function MessageList({
     }
   }, [messages]);
 
-  // Set up WebSocket handler for channel messages
+  // Set up channel message handler
   useEffect(() => {
     if (!channelId) return;
 
     console.log(`Setting up channel message handler for channel ${channelId}`);
 
-    // Always set up the channel message handler
-    const cleanup = addMessageHandler((msg) => {
-      try {
-        // Handle regular channel messages
-        if (msg.type === "message" && msg.channelId === channelId) {
-          console.log("MessageList received channel message:", msg);
+    if (!cleanupRef.current) {
+      const cleanup = addMessageHandler((msg) => {
+        try {
+          if (msg.type === "message" && msg.channelId === channelId) {
+            console.log("MessageList received channel message:", msg);
 
-          const newMessage = msg.newMessage as ChannelMessage;
-          if (!newMessage) {
-            console.log("No message data in WebSocket message");
-            return;
+            const newMessage = msg.newMessage as ChannelMessage;
+            if (!newMessage) {
+              console.log("No message data in WebSocket message");
+              return;
+            }
+
+            queryClient.setQueryData<ChannelMessage[]>(
+              [`/api/channels/${channelId}/messages`],
+              (oldMessages = []) => {
+                console.log("Updating message cache", {
+                  oldMessages,
+                  newMessage,
+                });
+
+                if (!oldMessages) return [newMessage];
+
+                // Check if message already exists
+                const messageExists = oldMessages.some((m) => m.id === newMessage.id);
+                if (messageExists) {
+                  return oldMessages.map((m) =>
+                    m.id === newMessage.id ? { ...m, ...newMessage } : m,
+                  );
+                }
+
+                // Only add message if it's not a thread reply
+                if (!newMessage.parentId) {
+                  const updatedMessages = [...oldMessages, newMessage];
+                  return updatedMessages.sort(
+                    (a, b) =>
+                      new Date(a.createdAt!).getTime() -
+                      new Date(b.createdAt!).getTime(),
+                  );
+                }
+
+                return oldMessages;
+              },
+            );
           }
-
-          queryClient.setQueryData<ChannelMessage[]>(
-            [`/api/channels/${channelId}/messages`],
-            (oldMessages = []) => {
-              console.log("Updating message cache", {
-                oldMessages,
-                newMessage,
-              });
-
-              if (!oldMessages) return [newMessage];
-
-              // Check if message already exists
-              const messageExists = oldMessages.some((m) => m.id === newMessage.id);
-              if (messageExists) {
-                return oldMessages.map((m) =>
-                  m.id === newMessage.id ? { ...m, ...newMessage } : m,
-                );
-              }
-
-              // Only add message if it's not a thread reply
-              if (!newMessage.parentId) {
-                const updatedMessages = [...oldMessages, newMessage];
-                return updatedMessages.sort(
-                  (a, b) =>
-                    new Date(a.createdAt!).getTime() -
-                    new Date(b.createdAt!).getTime(),
-                );
-              }
-
-              return oldMessages;
-            },
-          );
+        } catch (error) {
+          console.error("Error handling channel message:", error);
         }
-      } catch (error) {
-        console.error("Error handling channel message:", error);
-      }
-    }, `channel-${channelId}`);
+      }, `channel-${channelId}`);
 
-    // Clean up only when unmounting or changing channels
+      cleanupRef.current = cleanup;
+    }
+
     return () => {
-      console.log(`Cleaning up channel message handler for channel ${channelId}`);
-      cleanup();
+      // Only cleanup when unmounting or changing channels
+      if (cleanupRef.current) {
+        console.log(`Cleaning up channel message handler for channel ${channelId}`);
+        cleanupRef.current();
+        cleanupRef.current = null;
+      }
     };
   }, [channelId, queryClient, addMessageHandler]);
 
@@ -111,11 +117,7 @@ export default function MessageList({
 
     try {
       const newMessage = await sendMessage({ content });
-      console.log("Sending channel message:", {
-        type: "message",
-        channelId,
-        newMessage,
-      });
+      console.log("Sending channel message:", newMessage);
 
       sendWebSocketMessage({
         type: "message",
