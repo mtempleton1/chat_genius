@@ -22,8 +22,7 @@ export default function MessageList({
   const { messages, isLoading, sendMessage, addReaction } = useMessages(
     channelId ?? 0,
   );
-  const { addMessageHandler, sendMessage: sendWebSocketMessage } =
-    useWebSocket();
+  const { addMessageHandler, sendMessage: sendWebSocketMessage } = useWebSocket();
   const scrollRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
 
@@ -38,17 +37,15 @@ export default function MessageList({
     if (!channelId) return;
 
     const handler = (msg: any) => {
-      if (
-        (msg.type === "message" || msg.type === "thread_message") &&
-        msg.channelId === channelId &&
-        !msg.parentId
-      ) {
+      // Only handle non-thread messages or thread parent messages
+      if (msg.type === "message" && msg.channelId === channelId && !msg.parentId) {
         queryClient.setQueryData<Message[]>(
           [`/api/channels/${channelId}/messages`],
           (oldMessages = []) => {
-            const messageId = msg.newMessage.id || msg.newMessage.messageId;
+            const messageId = msg.newMessage?.id || msg.id;
             if (!messageId) return oldMessages;
 
+            // Check if message already exists
             const messageExists = oldMessages.some((m) => m.id === messageId);
             if (messageExists) {
               return oldMessages.map((m) =>
@@ -56,7 +53,8 @@ export default function MessageList({
               );
             }
 
-            return [...oldMessages, msg.newMessage].sort(
+            const newMessage = msg.newMessage || msg;
+            return [...oldMessages, newMessage].sort(
               (a, b) =>
                 new Date(a.createdAt!).getTime() -
                 new Date(b.createdAt!).getTime(),
@@ -67,9 +65,7 @@ export default function MessageList({
     };
 
     const cleanup = addMessageHandler(handler);
-    return () => {
-      cleanup();
-    };
+    return cleanup;
   }, [channelId, queryClient, addMessageHandler]);
 
   const handleSendMessage = async (content: string) => {
@@ -139,6 +135,7 @@ type MessageItemProps = {
       username: string;
       avatar?: string | null;
     };
+    attachments?: Array<{ url: string; name: string }>;
   };
   onThreadSelect: (messageId: number) => void;
   onReactionAdd: (emoji: string) => void;
@@ -173,7 +170,7 @@ function MessageItem({
 
         <p className="mt-1">{message.content}</p>
 
-        {message.attachments?.length > 0 && (
+        {message.attachments && message.attachments.length > 0 && (
           <div className="mt-2 flex gap-2">
             {message.attachments.map((attachment, i) => (
               <a

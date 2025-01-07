@@ -41,7 +41,7 @@ export function setupWebSocket(server: HttpServer) {
     ws.on("message", async (message: string) => {
       try {
         const data = JSON.parse(message);
-        console.log("NOW IM HERE", data);
+
         switch (data.type) {
           case "auth":
             ws.userId = data.userId;
@@ -75,29 +75,38 @@ export function setupWebSocket(server: HttpServer) {
             break;
 
           case "message":
-            if (!ws.userId || !data.newMessage.channelId) break;
+            if (!ws.userId || !data.newMessage?.channelId) break;
 
-            // Broadcast to channel members (excluding sender)
-            broadcastToChannel(data.channelId, data, ws.userId);
+            const channelId = data.newMessage.channelId;
+            const parentId = data.newMessage.parentId;
 
-            // If this is a thread message, broadcast it again with thread-specific type
-            if (data.parentId) {
-              broadcastToChannel(
-                data.channelId,
-                {
-                  ...data,
-                  type: "thread_message",
-                },
-                ws.userId,
-              );
+            // If this is a thread message
+            if (parentId) {
+              // Broadcast to channel members with thread_message type
+              broadcastToChannel(channelId, {
+                type: "thread_message",
+                ...data.newMessage,
+              });
+
+              // Also broadcast as a regular message to update thread counts/indicators
+              broadcastToChannel(channelId, {
+                type: "message",
+                ...data.newMessage,
+              });
+            } else {
+              // Regular channel message
+              broadcastToChannel(channelId, {
+                type: "message",
+                ...data.newMessage,
+              });
             }
 
             // Send confirmation back to sender
             ws.send(
               JSON.stringify({
                 type: "message_sent",
-                channelId: data.channelId,
-                content: data.content,
+                channelId: channelId,
+                content: data.newMessage.content,
               }),
             );
             break;
@@ -159,26 +168,23 @@ export function setupWebSocket(server: HttpServer) {
     clearInterval(interval);
   });
 
-  async function broadcastToChannel(
-    channelId: number,
-    message: any,
-    excludeUserId?: number,
-  ) {
-    const channelMemberIds = await db
-      .select({ userId: channelMembers.userId })
-      .from(channelMembers)
-      .where(eq(channelMembers.channelId, channelId));
+  async function broadcastToChannel(channelId: number, message: any) {
+    try {
+      const channelMemberIds = await db
+        .select({ userId: channelMembers.userId })
+        .from(channelMembers)
+        .where(eq(channelMembers.channelId, channelId));
 
-    const data = JSON.stringify(message);
+      const data = JSON.stringify(message);
 
-    for (const { userId } of channelMemberIds) {
-      // Skip sending to self if excludeUserId is provided
-      if (excludeUserId && userId === excludeUserId) continue;
-
-      const client = clients.get(userId);
-      if (client?.readyState === WebSocket.OPEN) {
-        client.send(data);
+      for (const { userId } of channelMemberIds) {
+        const client = clients.get(userId);
+        if (client?.readyState === WebSocket.OPEN) {
+          client.send(data);
+        }
       }
+    } catch (error) {
+      console.error("Error broadcasting to channel:", error);
     }
   }
 

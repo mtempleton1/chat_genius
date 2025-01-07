@@ -21,13 +21,13 @@ export default function ThreadView({ messageId, onClose }: ThreadViewProps) {
   const queryClient = useQueryClient();
 
   useEffect(() => {
+    // Only handle thread-specific messages
     return addMessageHandler((msg) => {
-      if ((msg.type === "message" || msg.type === "thread_message") && msg.parentId === messageId) {
+      if (msg.type === "thread_message" && msg.parentId === messageId) {
         queryClient.setQueryData<Message[]>(
           [`/api/messages/${messageId}/thread`],
-          (oldMessages) => {
-            if (!oldMessages) return [msg];
-            return [...oldMessages, {
+          (oldMessages = []) => {
+            const newMessage = {
               id: msg.id || msg.messageId,
               content: msg.content,
               userId: msg.userId,
@@ -36,7 +36,14 @@ export default function ThreadView({ messageId, onClose }: ThreadViewProps) {
               createdAt: new Date().toISOString(),
               user: msg.user,
               reactions: []
-            }];
+            };
+
+            // Check if message already exists
+            if (oldMessages.some(m => m.id === newMessage.id)) {
+              return oldMessages;
+            }
+
+            return [...oldMessages, newMessage];
           }
         );
       }
