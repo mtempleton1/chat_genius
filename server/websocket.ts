@@ -83,15 +83,19 @@ export function setupWebSocket(server: HttpServer) {
               .limit(1);
 
             // Broadcast to channel members
-            broadcastToChannel(data.channelId, {
+            const messageData = {
               type: "message",
+              id: data.messageId,
               messageId: data.messageId,
               channelId: data.channelId,
               content: data.content,
               userId: ws.userId,
               parentId: data.parentId,
-              user: messageUser
-            });
+              user: messageUser,
+              createdAt: new Date().toISOString(),
+              reactions: []
+            };
+            broadcastToChannel(data.channelId, messageData);
 
             // Send confirmation back to sender
             ws.send(JSON.stringify({

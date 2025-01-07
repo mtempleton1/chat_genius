@@ -28,7 +28,7 @@ export default function ThreadView({ messageId, onClose }: ThreadViewProps) {
           (oldMessages) => {
             if (!oldMessages) return [msg];
             return [...oldMessages, {
-              id: msg.messageId,
+              id: msg.id || msg.messageId,
               content: msg.content,
               userId: msg.userId,
               channelId: msg.channelId,

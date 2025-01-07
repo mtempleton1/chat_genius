@@ -38,7 +38,7 @@ export default function MessageList({ channelId, onThreadSelect }: MessageListPr
           (oldMessages) => {
             if (!oldMessages) return [msg];
             return [...oldMessages, {
-              id: msg.messageId,
+              id: msg.id || msg.messageId,
               content: msg.content,
               userId: msg.userId,
               channelId: msg.channelId,
