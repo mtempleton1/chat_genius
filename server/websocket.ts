@@ -89,6 +89,7 @@ export function setupWebSocket(server: HttpServer) {
               channelId: data.channelId,
               content: data.content,
               userId: ws.userId,
+              parentId: data.parentId,
               user: messageUser
             });
 

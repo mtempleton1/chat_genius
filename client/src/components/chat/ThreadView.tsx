@@ -14,6 +14,31 @@ type ThreadViewProps = {
 
 export default function ThreadView({ messageId, onClose }: ThreadViewProps) {
   const { messages, isLoading, sendMessage } = useMessages(messageId, true);
+  const { addMessageHandler } = useWebSocket();
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    return addMessageHandler((msg) => {
+      if (msg.type === "message" && msg.parentId === messageId) {
+        queryClient.setQueryData<Message[]>(
+          [`/api/messages/${messageId}/thread`],
+          (oldMessages) => {
+            if (!oldMessages) return [msg];
+            return [...oldMessages, {
+              id: msg.messageId,
+              content: msg.content,
+              userId: msg.userId,
+              channelId: msg.channelId,
+              parentId: msg.parentId,
+              createdAt: new Date().toISOString(),
+              user: msg.user,
+              reactions: []
+            }];
+          }
+        );
+      }
+    });
+  }, [addMessageHandler, messageId, queryClient]);
 
   if (isLoading) {
     return (
