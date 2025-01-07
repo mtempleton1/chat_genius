@@ -1,9 +1,12 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Message } from "@db/schema";
 
-export function useMessages(messageIdOrChannelId: number | null, isThread: boolean = false) {
+export function useMessages(
+  messageIdOrChannelId: number | null,
+  isThread: boolean = false,
+) {
   const queryClient = useQueryClient();
-  const queryKey = isThread 
+  const queryKey = isThread
     ? [`/api/messages/${messageIdOrChannelId}/thread`]
     : [`/api/channels/${messageIdOrChannelId}/messages`];
 
@@ -13,14 +16,20 @@ export function useMessages(messageIdOrChannelId: number | null, isThread: boole
   });
 
   const sendMessage = useMutation({
-    mutationFn: async ({ content, parentId }: { content: string; parentId?: number }) => {
+    mutationFn: async ({
+      content,
+      parentId,
+    }: {
+      content: string;
+      parentId?: number;
+    }) => {
       const response = await fetch("/api/messages", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          content, 
+        body: JSON.stringify({
+          content,
           channelId: parentId ? messages?.[0].channelId : messageIdOrChannelId,
-          parentId
+          parentId,
         }),
         credentials: "include",
       });
@@ -40,7 +49,13 @@ export function useMessages(messageIdOrChannelId: number | null, isThread: boole
   });
 
   const addReaction = useMutation({
-    mutationFn: async ({ messageId, emoji }: { messageId: number; emoji: string }) => {
+    mutationFn: async ({
+      messageId,
+      emoji,
+    }: {
+      messageId: number;
+      emoji: string;
+    }) => {
       const response = await fetch(`/api/messages/${messageId}/reactions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

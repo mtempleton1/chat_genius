@@ -41,7 +41,7 @@ export function setupWebSocket(server: HttpServer) {
     ws.on("message", async (message: string) => {
       try {
         const data = JSON.parse(message);
-
+        console.log("NOW IM HERE", data);
         switch (data.type) {
           case "auth":
             ws.userId = data.userId;
@@ -75,49 +75,17 @@ export function setupWebSocket(server: HttpServer) {
             break;
 
           case "message":
-            if (!ws.userId || !data.channelId) break;
-
-            // Get user details for the message
-            const [messageUser] = await db
-              .select()
-              .from(users)
-              .where(eq(users.id, ws.userId))
-              .limit(1);
-
-            // Create message in database first
-            const [newMessage] = await db
-              .insert(messages)
-              .values({
-                content: data.content,
-                channelId: data.channelId,
-                userId: ws.userId,
-                parentId: data.parentId,
-              })
-              .returning();
-
-            // Prepare message data with actual message ID
-            const messageData = {
-              type: "message",
-              id: newMessage.id,
-              messageId: newMessage.id,
-              channelId: data.channelId,
-              content: data.content,
-              userId: ws.userId,
-              parentId: data.parentId,
-              user: messageUser,
-              createdAt: new Date().toISOString(),
-              reactions: [],
-            };
+            if (!ws.userId || !data.newMessage.channelId) break;
 
             // Broadcast to channel members (excluding sender)
-            broadcastToChannel(data.channelId, messageData, ws.userId);
+            broadcastToChannel(data.channelId, data, ws.userId);
 
             // If this is a thread message, broadcast it again with thread-specific type
             if (data.parentId) {
               broadcastToChannel(
                 data.channelId,
                 {
-                  ...messageData,
+                  ...data,
                   type: "thread_message",
                 },
                 ws.userId,

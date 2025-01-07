@@ -43,35 +43,20 @@ export default function MessageList({
         msg.channelId === channelId &&
         !msg.parentId
       ) {
-        console.log(msg.type, "MESSAGE RECEIVED!");
         queryClient.setQueryData<Message[]>(
           [`/api/channels/${channelId}/messages`],
           (oldMessages = []) => {
-            const messageId = msg.id || msg.messageId;
-            console.log("HERE", messageId);
+            const messageId = msg.newMessage.id || msg.newMessage.messageId;
             if (!messageId) return oldMessages;
-            
-            const newMessage = {
-              id: messageId,
-              content: msg.content,
-              userId: msg.userId,
-              channelId: msg.channelId,
-              createdAt: new Date(msg.createdAt || msg.updatedAt || new Date()),
-              parentId: msg.parentId,
-              attachments: msg.attachments || [],
-              updatedAt: msg.updatedAt,
-              user: msg.user,
-              reactions: [],
-            };
 
             const messageExists = oldMessages.some((m) => m.id === messageId);
             if (messageExists) {
               return oldMessages.map((m) =>
-                m.id === messageId ? { ...m, ...newMessage } : m,
+                m.id === messageId ? { ...m, ...msg.newMessage } : m,
               );
             }
 
-            return [...oldMessages, newMessage].sort(
+            return [...oldMessages, msg.newMessage].sort(
               (a, b) =>
                 new Date(a.createdAt!).getTime() -
                 new Date(b.createdAt!).getTime(),
@@ -90,11 +75,11 @@ export default function MessageList({
   const handleSendMessage = async (content: string) => {
     if (!channelId) return;
 
-    await sendMessage({ content });
+    const newMessage = await sendMessage({ content });
     sendWebSocketMessage({
       type: "message",
       channelId,
-      content,
+      newMessage,
     });
   };
 
