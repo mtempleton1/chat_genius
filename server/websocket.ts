@@ -85,6 +85,8 @@ export function setupWebSocket(server: HttpServer) {
               .limit(1);
 
             // Prepare message data
+            console.log("PREPARINGGGGG MESSGSGSGS");
+            console.log(data);
             const messageData = {
               type: "message",
               id: data.messageId,
@@ -103,10 +105,14 @@ export function setupWebSocket(server: HttpServer) {
 
             // If this is a thread message, broadcast it again with thread-specific type
             if (data.parentId) {
-              broadcastToChannel(data.channelId, {
-                ...messageData,
-                type: "thread_message",
-              }, ws.userId);
+              broadcastToChannel(
+                data.channelId,
+                {
+                  ...messageData,
+                  type: "thread_message",
+                },
+                ws.userId,
+              );
             }
 
             // Send confirmation back to sender
@@ -176,18 +182,22 @@ export function setupWebSocket(server: HttpServer) {
     clearInterval(interval);
   });
 
-  async function broadcastToChannel(channelId: number, message: any, excludeUserId?: number) {
+  async function broadcastToChannel(
+    channelId: number,
+    message: any,
+    excludeUserId?: number,
+  ) {
     const channelMemberIds = await db
       .select({ userId: channelMembers.userId })
       .from(channelMembers)
       .where(eq(channelMembers.channelId, channelId));
 
     const data = JSON.stringify(message);
-    
+
     for (const { userId } of channelMemberIds) {
       // Skip sending to self if excludeUserId is provided
       if (excludeUserId && userId === excludeUserId) continue;
-      
+
       const client = clients.get(userId);
       if (client?.readyState === WebSocket.OPEN) {
         client.send(data);

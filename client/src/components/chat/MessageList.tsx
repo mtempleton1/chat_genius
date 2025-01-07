@@ -43,12 +43,14 @@ export default function MessageList({
         msg.channelId === channelId &&
         !msg.parentId
       ) {
+        console.log(msg.type, "MESSAGE RECEIVED!");
         queryClient.setQueryData<Message[]>(
           [`/api/channels/${channelId}/messages`],
           (oldMessages = []) => {
             const messageId = msg.id || msg.messageId;
+            console.log("HERE", messageId);
             if (!messageId) return oldMessages;
-
+            
             const newMessage = {
               id: messageId,
               content: msg.content,
@@ -62,15 +64,19 @@ export default function MessageList({
               reactions: [],
             };
 
-            const messageExists = oldMessages.some(m => m.id === messageId);
+            const messageExists = oldMessages.some((m) => m.id === messageId);
             if (messageExists) {
-              return oldMessages.map(m => m.id === messageId ? { ...m, ...newMessage } : m);
+              return oldMessages.map((m) =>
+                m.id === messageId ? { ...m, ...newMessage } : m,
+              );
             }
-            
-            return [...oldMessages, newMessage].sort((a, b) => 
-              new Date(a.createdAt!).getTime() - new Date(b.createdAt!).getTime()
+
+            return [...oldMessages, newMessage].sort(
+              (a, b) =>
+                new Date(a.createdAt!).getTime() -
+                new Date(b.createdAt!).getTime(),
             );
-          }
+          },
         );
       }
     };
