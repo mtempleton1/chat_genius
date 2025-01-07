@@ -36,11 +36,14 @@ const upload = multer({
 });
 
 export function registerRoutes(app: Express): Server {
+  // Important: Create HTTP server first
   const httpServer = createServer(app);
-  setupWebSocket(httpServer);
 
   // Important: Setup auth before other routes to ensure proper session handling
   setupAuth(app);
+
+  // Setup WebSocket after creating HTTP server
+  setupWebSocket(httpServer);
 
   app.get("/api/workspaces/:workspaceId", async (req, res) => {
     const workspaceId = parseInt(req.params.workspaceId);
@@ -325,7 +328,6 @@ export function registerRoutes(app: Express): Server {
     res.json(workspace);
   });
 
-
   app.get("/api/messages/:messageId/thread", async (req, res) => {
     const user = req.user as Express.User;
     if (!user) return res.status(401).send("Not authenticated");
@@ -394,7 +396,6 @@ export function registerRoutes(app: Express): Server {
 
     res.json(completeMessage);
   });
-
 
   app.post("/api/messages/:messageId/reactions", async (req, res) => {
     const user = req.user as Express.User;

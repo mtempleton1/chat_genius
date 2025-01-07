@@ -28,8 +28,8 @@ export function useWebSocket() {
 
     ws.onopen = () => {
       console.log("WebSocket connected");
-      reconnectAttemptsRef.current = 0;
       ws.send(JSON.stringify({ type: "auth", userId: user.id }));
+      reconnectAttemptsRef.current = 0;
 
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
@@ -40,6 +40,9 @@ export function useWebSocket() {
     ws.onmessage = (event) => {
       try {
         const message = JSON.parse(event.data);
+        if (message.type === "auth_success") {
+          console.log("Authentication successful");
+        }
         messageHandlersRef.current.forEach((handler) => handler(message));
       } catch (error) {
         console.error("WebSocket message parsing error:", error);
@@ -55,6 +58,7 @@ export function useWebSocket() {
         const timeout = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 10000);
         reconnectAttemptsRef.current++;
 
+        console.log(`Attempting to reconnect in ${timeout}ms`);
         reconnectTimeoutRef.current = setTimeout(() => {
           connect();
         }, timeout);
@@ -103,15 +107,20 @@ export function useWebSocket() {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify(message));
     } else {
-      toast({
-        title: "Connection Error",
-        description: "Unable to send message. Please wait while we reconnect.",
-        variant: "destructive",
-      });
-      // Try to reconnect if not already connected
-      if (!wsRef.current || wsRef.current.readyState !== WebSocket.CONNECTING) {
+      if (!wsRef.current || wsRef.current.readyState === WebSocket.CLOSED) {
         connect();
       }
+      setTimeout(() => {
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+          wsRef.current.send(JSON.stringify(message));
+        } else {
+          toast({
+            title: "Connection Error",
+            description: "Unable to send message. Please try again.",
+            variant: "destructive",
+          });
+        }
+      }, 1000);
     }
   }, [toast, connect]);
 

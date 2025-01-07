@@ -7,11 +7,13 @@ import { eq } from "drizzle-orm";
 interface Client extends WebSocket {
   userId?: number;
   channels?: Set<number>;
+  isAlive?: boolean;
 }
 
 export function setupWebSocket(server: HttpServer) {
   const wss = new WebSocketServer({ 
-    noServer: true
+    noServer: true,
+    clientTracking: true
   });
 
   server.on('upgrade', (request, socket, head) => {
@@ -27,8 +29,14 @@ export function setupWebSocket(server: HttpServer) {
 
   const clients = new Map<number, Client>();
 
+  function heartbeat(this: Client) {
+    this.isAlive = true;
+  }
+
   wss.on("connection", (ws: Client) => {
+    ws.isAlive = true;
     ws.channels = new Set();
+    ws.on('pong', heartbeat);
 
     ws.on("message", async (message: string) => {
       try {
@@ -55,6 +63,12 @@ export function setupWebSocket(server: HttpServer) {
               ws.channels?.add(channelId);
             });
 
+            // Send confirmation back to client
+            ws.send(JSON.stringify({ 
+              type: "auth_success",
+              userId: data.userId
+            }));
+
             broadcastUserStatus(data.userId, "online");
             break;
 
@@ -68,6 +82,13 @@ export function setupWebSocket(server: HttpServer) {
               content: data.content,
               userId: ws.userId
             });
+
+            // Send confirmation back to sender
+            ws.send(JSON.stringify({
+              type: "message_sent",
+              channelId: data.channelId,
+              content: data.content
+            }));
             break;
 
           case "typing":
@@ -82,6 +103,10 @@ export function setupWebSocket(server: HttpServer) {
         }
       } catch (error) {
         console.error("WebSocket message error:", error);
+        ws.send(JSON.stringify({
+          type: "error",
+          message: "Failed to process message"
+        }));
       }
     });
 
@@ -99,16 +124,26 @@ export function setupWebSocket(server: HttpServer) {
       }
     });
 
-    // Keep connection alive with ping/pong
-    const pingInterval = setInterval(() => {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.ping();
-      }
-    }, 30000);
-
-    ws.on("close", () => {
-      clearInterval(pingInterval);
+    ws.on("error", (error) => {
+      console.error("WebSocket client error:", error);
     });
+  });
+
+  // Heartbeat interval to check connection status
+  const interval = setInterval(() => {
+    wss.clients.forEach((ws: Client) => {
+      if (ws.isAlive === false) {
+        ws.terminate();
+        return;
+      }
+
+      ws.isAlive = false;
+      ws.ping();
+    });
+  }, 30000);
+
+  wss.on('close', () => {
+    clearInterval(interval);
   });
 
   async function broadcastToChannel(channelId: number, message: any) {
