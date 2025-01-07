@@ -54,7 +54,7 @@ export function registerRoutes(app: Express): Server {
   // Setup WebSocket after creating HTTP server
   setupWebSocket(httpServer);
 
-  // Add new endpoint to get user's workspaces
+  // Add endpoint to get user's workspaces
   app.get("/api/user/workspaces", async (req, res) => {
     const user = req.user as Express.User;
     if (!user) return res.status(401).send("Not authenticated");
@@ -404,7 +404,7 @@ export function registerRoutes(app: Express): Server {
         .from(workspaceMembers)
         .where(
           and(
-            eq(workspaceMembers.workspaceId, workspace?.id), //Null check added here
+            eq(workspaceMembers.workspaceId, workspace?.id),
             eq(workspaceMembers.userId, user.id),
           ),
         )

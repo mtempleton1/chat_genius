@@ -66,9 +66,8 @@ app.use((req, res, next) => {
   }
 
   // Use environment port or fallback to 5000
-  const PORT = process.env.PORT || 5000;
+  const PORT = parseInt(process.env.PORT || "5000", 10);
 
-  // Check if port is in use
   server.on('error', (e: any) => {
     if (e.code === 'EADDRINUSE') {
       console.error(`Port ${PORT} is already in use`);
