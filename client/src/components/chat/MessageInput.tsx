@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 
 type MessageInputProps = {
-  onSendMessage: (content: string) => void;
+  onSendMessage: (content: string, options?: { parentId?: number }) => void;
   fileUploadComponent: React.ReactNode;
 };
 
@@ -38,9 +38,9 @@ export default function MessageInput({ onSendMessage, fileUploadComponent }: Mes
           rows={1}
         />
       </div>
-      
+
       {fileUploadComponent}
-      
+
       <Button type="submit" size="icon" disabled={!content.trim()}>
         <Send className="h-4 w-4" />
       </Button>

@@ -13,7 +13,7 @@ type ThreadViewProps = {
 };
 
 export default function ThreadView({ messageId, onClose }: ThreadViewProps) {
-  const { messages, isLoading, sendMessage } = useMessages(null, messageId);
+  const { messages, isLoading, sendMessage } = useMessages(messageId);
 
   if (isLoading) {
     return (
@@ -31,10 +31,10 @@ export default function ThreadView({ messageId, onClose }: ThreadViewProps) {
     );
   }
 
-  const parentMessage = messages?.find(m => m.id === messageId);
+  const parentMessage = messages?.[0];
   if (!parentMessage) return null;
 
-  const replies = messages?.filter(m => m.id !== messageId);
+  const replies = messages?.slice(1);
 
   return (
     <div className="h-full flex flex-col border-l">
@@ -56,7 +56,7 @@ export default function ThreadView({ messageId, onClose }: ThreadViewProps) {
 
       <div className="p-4 border-t">
         <MessageInput
-          onSendMessage={(content) => sendMessage(content)}
+          onSendMessage={(content) => sendMessage(content, { parentId: messageId })}
           fileUploadComponent={<FileUpload channelId={parentMessage.channelId!} />}
         />
       </div>
@@ -90,7 +90,7 @@ function ThreadMessage({ message, isParent }: ThreadMessageProps) {
         </div>
       </div>
       <p className="mt-2">{message.content}</p>
-      {message.attachments?.length > 0 && (
+      {message.attachments && message.attachments.length > 0 && (
         <div className="mt-2 flex gap-2">
           {message.attachments.map((attachment, index) => (
             <a

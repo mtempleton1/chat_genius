@@ -337,23 +337,44 @@ export function registerRoutes(app: Express): Server {
       return res.status(400).send("Invalid message ID");
     }
 
-    const threadMessages = await db.query.messages.findMany({
-      where: or(
-        eq(messages.id, messageId),
-        eq(messages.parentId, messageId)
-      ),
-      orderBy: [asc(messages.createdAt)],
-      with: {
-        user: true,
-        reactions: {
-          with: {
-            user: true,
-          },
-        },
-      },
-    });
+    try {
+      // First get the parent message with full details
+      const parentMessage = await db.query.messages.findFirst({
+        where: eq(messages.id, messageId),
+        with: {
+          user: true,
+          reactions: {
+            with: {
+              user: true
+            }
+          }
+        }
+      });
 
-    res.json(threadMessages);
+      if (!parentMessage) {
+        return res.status(404).send("Thread not found");
+      }
+
+      // Then get all replies in chronological order
+      const replies = await db.query.messages.findMany({
+        where: eq(messages.parentId, messageId),
+        with: {
+          user: true,
+          reactions: {
+            with: {
+              user: true
+            }
+          }
+        },
+        orderBy: [asc(messages.createdAt)]
+      });
+
+      // Return the thread with parent message first
+      res.json([parentMessage, ...replies]);
+    } catch (error) {
+      console.error("Error fetching thread:", error);
+      res.status(500).send("Internal server error");
+    }
   });
 
   app.post("/api/messages", async (req, res) => {
@@ -362,39 +383,56 @@ export function registerRoutes(app: Express): Server {
 
     const { content, channelId, parentId } = req.body;
 
+    // Validate channel ID
     const channelIdNum = parseInt(channelId);
     if (isNaN(channelIdNum)) {
       return res.status(400).send("Invalid channel ID");
     }
 
-    const [message] = await db
-      .insert(messages)
-      .values({
-        content,
-        channelId: channelIdNum,
-        parentId: parentId ? parseInt(parentId) : null,
-        userId: user.id,
-      })
-      .returning();
+    try {
+      // If this is a thread message, verify parent message exists
+      if (parentId) {
+        const parentMessage = await db.query.messages.findFirst({
+          where: eq(messages.id, parentId)
+        });
 
-    const [completeMessage] = await db.query.messages.findMany({
-      where: eq(messages.id, message.id),
-      with: {
-        user: true,
-        reactions: {
-          with: {
-            user: true,
-          },
-        },
-      },
-      limit: 1,
-    });
+        if (!parentMessage) {
+          return res.status(404).send("Parent message not found");
+        }
+      }
 
-    if (!completeMessage) {
-      return res.status(500).send("Failed to create message");
+      const [newMessage] = await db
+        .insert(messages)
+        .values({
+          content,
+          channelId: channelIdNum,
+          parentId: parentId ? parseInt(parentId) : null,
+          userId: user.id,
+        })
+        .returning();
+
+      // Fetch complete message with user and reactions
+      const completeMessage = await db.query.messages.findFirst({
+        where: eq(messages.id, newMessage.id),
+        with: {
+          user: true,
+          reactions: {
+            with: {
+              user: true
+            }
+          }
+        }
+      });
+
+      if (!completeMessage) {
+        return res.status(500).send("Failed to create message");
+      }
+
+      res.json(completeMessage);
+    } catch (error) {
+      console.error("Error creating message:", error);
+      res.status(500).send("Internal server error");
     }
-
-    res.json(completeMessage);
   });
 
   app.post("/api/messages/:messageId/reactions", async (req, res) => {

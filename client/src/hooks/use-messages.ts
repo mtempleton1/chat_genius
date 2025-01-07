@@ -1,26 +1,27 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Message } from "@db/schema";
 
-export function useMessages(channelId: number | null, threadId?: number) {
+export function useMessages(channelId: number | null) {
   const queryClient = useQueryClient();
-  const queryKey = threadId 
-    ? [`/api/messages/${threadId}/thread`]
+  const isThread = typeof channelId === "number" && channelId > 0;
+  const queryKey = isThread 
+    ? [`/api/messages/${channelId}/thread`]
     : [`/api/channels/${channelId}/messages`];
 
   const { data: messages, isLoading } = useQuery<Message[]>({
     queryKey,
-    enabled: (channelId !== null && channelId > 0) || (threadId !== undefined && threadId > 0),
+    enabled: channelId !== null && channelId > 0,
   });
 
   const sendMessage = useMutation({
-    mutationFn: async (content: string) => {
+    mutationFn: async (content: string, options?: { parentId?: number }) => {
       const response = await fetch("/api/messages", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           content, 
-          channelId,
-          parentId: threadId // Add parentId for thread messages
+          channelId: options?.parentId ? messages?.[0].channelId : channelId,
+          parentId: options?.parentId
         }),
         credentials: "include",
       });
@@ -32,7 +33,6 @@ export function useMessages(channelId: number | null, threadId?: number) {
       return response.json();
     },
     onSuccess: (newMessage) => {
-      // Optimistically update the messages cache
       queryClient.setQueryData<Message[]>(queryKey, (old) => {
         if (!old) return [newMessage];
         return [...old, newMessage];
@@ -65,7 +65,7 @@ export function useMessages(channelId: number | null, threadId?: number) {
   return {
     messages,
     isLoading,
-    sendMessage: sendMessage.mutate,
+    sendMessage: sendMessage.mutateAsync,
     addReaction: addReaction.mutate,
   };
 }
