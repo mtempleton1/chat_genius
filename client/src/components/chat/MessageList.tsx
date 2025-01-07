@@ -47,8 +47,11 @@ export default function MessageList({
         queryClient.setQueryData<Message[]>(
           [`/api/channels/${channelId}/messages`],
           (oldMessages) => {
+            const messageId = msg.id || msg.messageId;
+            if (!messageId) return oldMessages;
+
             const newMessage = {
-              id: msg.id || msg.messageId,
+              id: messageId,
               content: msg.content,
               userId: msg.userId,
               channelId: msg.channelId,
@@ -59,11 +62,19 @@ export default function MessageList({
               user: msg.user,
               reactions: [],
             };
+
             if (!oldMessages) return [newMessage];
-            // Avoid duplicate messages
-            if (oldMessages.some((m) => m.id === (msg.id || msg.messageId))) {
-              return oldMessages;
+
+            // Ensure we don't add duplicate messages
+            const messageExists = oldMessages.some(m => m.id === messageId);
+            if (messageExists) {
+              // Update existing message if needed
+              return oldMessages.map(m => 
+                m.id === messageId ? { ...m, ...newMessage } : m
+              );
             }
+            
+            // Add new message
             return [...oldMessages, newMessage];
           },
         );
