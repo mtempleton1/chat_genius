@@ -15,6 +15,11 @@ type ThreadViewProps = {
   onClose: () => void;
 };
 
+type ThreadMessage = Message & {
+  user?: User;
+  attachments?: Array<{ url: string; name: string }> | null;
+};
+
 export default function ThreadView({ messageId, onClose }: ThreadViewProps) {
   const { messages, isLoading, sendMessage } = useMessages(messageId, true);
   const { addMessageHandler, sendMessage: sendWebSocketMessage } = useWebSocket();
@@ -35,32 +40,31 @@ export default function ThreadView({ messageId, onClose }: ThreadViewProps) {
       try {
         // Only handle thread messages for this specific thread
         if (msg.type === "thread_message" && msg.parentId === messageId) {
-          console.log("Received thread message:", msg);
-          queryClient.setQueryData<Message[]>(
+          console.log("ThreadView received thread message:", msg);
+
+          queryClient.setQueryData<ThreadMessage[]>(
             [`/api/messages/${messageId}/thread`],
             (oldMessages = []) => {
-              if (!oldMessages) return [msg];
-
-              const newMessage = {
+              const newMessage: ThreadMessage = {
                 id: msg.messageId,
                 content: msg.content,
                 userId: msg.userId,
                 channelId: msg.channelId,
                 parentId: msg.parentId,
-                createdAt: msg.createdAt || new Date().toISOString(),
+                createdAt: msg.createdAt || new Date(),
+                updatedAt: msg.createdAt || new Date(),
                 user: msg.user,
                 reactions: [],
                 attachments: msg.attachments || null,
-                updatedAt: msg.createdAt || new Date().toISOString()
               };
 
               // Check if message already exists
-              if (oldMessages.some(m => m.id === newMessage.id)) {
+              if (oldMessages?.some((m) => m.id === newMessage.id)) {
                 return oldMessages;
               }
 
-              return [...oldMessages, newMessage];
-            }
+              return [...(oldMessages || []), newMessage];
+            },
           );
         }
       } catch (error) {
@@ -85,7 +89,7 @@ export default function ThreadView({ messageId, onClose }: ThreadViewProps) {
 
     try {
       const newMessage = await sendMessage({ content, parentId: messageId });
-      console.log("Sending thread message:", {
+      console.log("Sending thread message through WebSocket:", {
         type: "thread_message",
         channelId: newMessage.channelId,
         messageId: newMessage.id,
@@ -93,7 +97,8 @@ export default function ThreadView({ messageId, onClose }: ThreadViewProps) {
         content: newMessage.content,
         userId: newMessage.userId,
         user: newMessage.user,
-        createdAt: newMessage.createdAt
+        createdAt: newMessage.createdAt,
+        attachments: newMessage.attachments,
       });
 
       // Broadcast the message through WebSocket
@@ -129,10 +134,10 @@ export default function ThreadView({ messageId, onClose }: ThreadViewProps) {
     );
   }
 
-  const parentMessage = messages?.[0];
+  const parentMessage = messages?.[0] as ThreadMessage;
   if (!parentMessage) return null;
 
-  const replies = messages?.slice(1);
+  const replies = messages?.slice(1) as ThreadMessage[];
 
   return (
     <div className="h-full flex flex-col border-l">
@@ -163,10 +168,7 @@ export default function ThreadView({ messageId, onClose }: ThreadViewProps) {
 }
 
 type ThreadMessageProps = {
-  message: Message & {
-    user?: User;
-    attachments?: Array<{ url: string; name: string }>;
-  };
+  message: ThreadMessage;
   isParent?: boolean;
 };
 

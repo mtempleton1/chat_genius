@@ -24,7 +24,12 @@ export function useWebSocket() {
   const isConnectingRef = useRef(false);
 
   const connect = useCallback(() => {
-    if (!user || wsRef.current?.readyState === WebSocket.OPEN || isConnectingRef.current) return;
+    if (
+      !user ||
+      wsRef.current?.readyState === WebSocket.OPEN ||
+      isConnectingRef.current
+    )
+      return;
 
     isConnectingRef.current = true;
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -53,14 +58,21 @@ export function useWebSocket() {
 
         if (message.type === "auth_success") {
           console.log("WebSocket authentication successful");
+          return;
         }
 
-        // Call all registered message handlers
-        messageHandlersRef.current.forEach(({ handler }) => {
+        // Call all registered message handlers that match the message type or scope
+        messageHandlersRef.current.forEach(({ handler, scope }) => {
           try {
-            handler(message);
+            if (
+              (message.type === "message" && scope.startsWith("channel-")) ||
+              (message.type === "thread_message" && scope.startsWith("thread-"))
+            ) {
+              console.log(`Calling handler for scope: ${scope}`);
+              handler(message);
+            }
           } catch (handlerError) {
-            console.error("Message handler error:", handlerError);
+            console.error(`Message handler error for scope ${scope}:`, handlerError);
           }
         });
       } catch (error) {
@@ -78,17 +90,23 @@ export function useWebSocket() {
         document.visibilityState === "visible" &&
         reconnectAttemptsRef.current < maxReconnectAttempts
       ) {
-        const timeout = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 10000);
+        const timeout = Math.min(
+          1000 * Math.pow(2, reconnectAttemptsRef.current),
+          10000,
+        );
         reconnectAttemptsRef.current++;
 
-        console.log(`Attempting to reconnect in ${timeout}ms (attempt ${reconnectAttemptsRef.current}/${maxReconnectAttempts})`);
+        console.log(
+          `Attempting to reconnect in ${timeout}ms (attempt ${reconnectAttemptsRef.current}/${maxReconnectAttempts})`,
+        );
         reconnectTimeoutRef.current = setTimeout(() => {
           connect();
         }, timeout);
       } else if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
         toast({
           title: "Connection Error",
-          description: "Unable to connect to chat server after multiple attempts. Please refresh the page.",
+          description:
+            "Unable to connect to chat server after multiple attempts. Please refresh the page.",
           variant: "destructive",
         });
       }
@@ -161,9 +179,14 @@ export function useWebSocket() {
   );
 
   const addMessageHandler = useCallback(
-    (handler: (message: WebSocketMessage) => void, scope: string = 'global') => {
+    (
+      handler: (message: WebSocketMessage) => void,
+      scope: string = "global",
+    ) => {
       const handlerId = Math.random().toString(36).substring(7);
-      console.log(`Adding new WebSocket message handler (${handlerId}) for scope: ${scope}`);
+      console.log(
+        `Adding new WebSocket message handler (${handlerId}) for scope: ${scope}`,
+      );
 
       messageHandlersRef.current.push({
         id: handlerId,
@@ -172,7 +195,9 @@ export function useWebSocket() {
       });
 
       return () => {
-        console.log(`Removing WebSocket message handler (${handlerId}) from scope: ${scope}`);
+        console.log(
+          `Removing WebSocket message handler (${handlerId}) from scope: ${scope}`,
+        );
         messageHandlersRef.current = messageHandlersRef.current.filter(
           (h) => h.id !== handlerId,
         );

@@ -15,6 +15,15 @@ type MessageListProps = {
   onThreadSelect: (messageId: number) => void;
 };
 
+type ChannelMessage = Message & {
+  user?: {
+    id: number;
+    username: string;
+    avatar?: string | null;
+  };
+  attachments?: Array<{ url: string; name: string }> | null;
+};
+
 export default function MessageList({
   channelId,
   onThreadSelect,
@@ -38,6 +47,8 @@ export default function MessageList({
   useEffect(() => {
     if (!channelId) return;
 
+    console.log(`Setting up channel message handler for channel ${channelId}`);
+
     // Remove existing handler if any
     if (handlerRef.current) {
       handlerRef.current();
@@ -47,31 +58,45 @@ export default function MessageList({
     // Add new handler for channel messages
     const cleanup = addMessageHandler((msg) => {
       try {
-        // Handle regular channel messages only, including thread updates
+        // Handle regular channel messages only
         if (msg.type === "message" && msg.channelId === channelId) {
-          console.log("Received channel message:", msg);
-          queryClient.setQueryData<Message[]>(
+          console.log("MessageList received channel message:", msg);
+
+          const newMessage = msg.newMessage as ChannelMessage;
+          if (!newMessage) {
+            console.log("No message data in WebSocket message");
+            return;
+          }
+
+          queryClient.setQueryData<ChannelMessage[]>(
             [`/api/channels/${channelId}/messages`],
             (oldMessages = []) => {
-              if (!oldMessages) return [msg.newMessage];
+              console.log("Updating message cache", {
+                oldMessages,
+                newMessage,
+              });
 
-              const messageId = msg.newMessage?.id || msg.id;
-              if (!messageId) return oldMessages;
+              if (!oldMessages) return [newMessage];
 
               // Check if message already exists
-              const messageExists = oldMessages.some((m) => m.id === messageId);
+              const messageExists = oldMessages.some((m) => m.id === newMessage.id);
               if (messageExists) {
                 return oldMessages.map((m) =>
-                  m.id === messageId ? { ...m, ...msg.newMessage } : m,
+                  m.id === newMessage.id ? { ...m, ...newMessage } : m,
                 );
               }
 
-              const newMessage = msg.newMessage || msg;
-              return [...oldMessages, newMessage].sort(
-                (a, b) =>
-                  new Date(a.createdAt!).getTime() -
-                  new Date(b.createdAt!).getTime(),
-              );
+              // Only add message if it's not a thread reply
+              if (!newMessage.parentId) {
+                const updatedMessages = [...oldMessages, newMessage];
+                return updatedMessages.sort(
+                  (a, b) =>
+                    new Date(a.createdAt!).getTime() -
+                    new Date(b.createdAt!).getTime(),
+                );
+              }
+
+              return oldMessages;
             },
           );
         }
@@ -80,13 +105,13 @@ export default function MessageList({
       }
     }, `channel-${channelId}`);
 
-    // Store the cleanup function
+    // Store cleanup function
     handlerRef.current = cleanup;
 
     // Return cleanup function
     return () => {
       if (handlerRef.current) {
-        console.log("Cleaning up channel message handler");
+        console.log(`Cleaning up channel message handler for channel ${channelId}`);
         handlerRef.current();
         handlerRef.current = null;
       }
@@ -103,6 +128,7 @@ export default function MessageList({
         channelId,
         newMessage,
       });
+
       sendWebSocketMessage({
         type: "message",
         channelId,
@@ -129,6 +155,9 @@ export default function MessageList({
     );
   }
 
+  // Filter out thread replies from the main channel view
+  const channelMessages = messages?.filter((msg) => !msg.parentId) || [];
+
   return (
     <div className="h-full flex flex-col">
       <div className="border-b px-4 py-2">
@@ -138,10 +167,10 @@ export default function MessageList({
       <div className="flex-1 overflow-hidden" ref={scrollRef}>
         <ScrollArea className="h-full">
           <div className="p-4 space-y-4">
-            {messages?.map((message) => (
+            {channelMessages.map((message) => (
               <MessageItem
                 key={message.id}
-                message={message}
+                message={message as ChannelMessage}
                 onThreadSelect={onThreadSelect}
                 onReactionAdd={(emoji) =>
                   addReaction({ messageId: message.id, emoji })
@@ -163,14 +192,7 @@ export default function MessageList({
 }
 
 type MessageItemProps = {
-  message: Message & {
-    user?: {
-      id: number;
-      username: string;
-      avatar?: string | null;
-    };
-    attachments?: Array<{ url: string; name: string }>;
-  };
+  message: ChannelMessage;
   onThreadSelect: (messageId: number) => void;
   onReactionAdd: (emoji: string) => void;
 };
@@ -185,9 +207,7 @@ function MessageItem({ message, onThreadSelect, onReactionAdd }: MessageItemProp
           src={message.user.avatar || undefined}
           alt={message.user.username}
         />
-        <AvatarFallback>
-          {message.user.username[0].toUpperCase()}
-        </AvatarFallback>
+        <AvatarFallback>{message.user.username[0].toUpperCase()}</AvatarFallback>
       </Avatar>
 
       <div className="flex-1">
