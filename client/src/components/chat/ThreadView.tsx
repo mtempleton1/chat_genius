@@ -22,7 +22,7 @@ export default function ThreadView({ messageId, onClose }: ThreadViewProps) {
 
   useEffect(() => {
     return addMessageHandler((msg) => {
-      if (msg.type === "message" && msg.parentId === messageId) {
+      if ((msg.type === "message" || msg.type === "thread_message") && msg.parentId === messageId) {
         queryClient.setQueryData<Message[]>(
           [`/api/messages/${messageId}/thread`],
           (oldMessages) => {

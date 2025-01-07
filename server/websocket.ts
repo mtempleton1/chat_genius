@@ -84,7 +84,7 @@ export function setupWebSocket(server: HttpServer) {
               .where(eq(users.id, ws.userId))
               .limit(1);
 
-            // Broadcast to channel members
+            // Prepare message data
             const messageData = {
               type: "message",
               id: data.messageId,
@@ -97,7 +97,17 @@ export function setupWebSocket(server: HttpServer) {
               createdAt: new Date().toISOString(),
               reactions: [],
             };
+            
+            // Broadcast to channel members
             broadcastToChannel(data.channelId, messageData);
+
+            // If this is a thread message, broadcast it again with thread-specific type
+            if (data.parentId) {
+              broadcastToChannel(data.channelId, {
+                ...messageData,
+                type: "thread_message"
+              });
+            }
 
             // Send confirmation back to sender
             ws.send(
