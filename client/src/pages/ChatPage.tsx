@@ -48,6 +48,12 @@ export default function ChatPage() {
     enabled: !!workspaceId,
   });
 
+  // Query for channels when workspace is selected
+  const { data: channels } = useQuery({
+    queryKey: [`/api/workspaces/${workspaceId}/channels`],
+    enabled: !!workspaceId,
+  });
+
   if (!user) return null;
 
   // Prepare user data for UserPresence component
@@ -110,6 +116,8 @@ export default function ChatPage() {
                 <ChannelList
                   selectedChannelId={selectedChannelId}
                   onSelectChannel={setSelectedChannelId}
+                  channels={channels}
+                  workspaceId={workspace.id}
                 />
               </ResizablePanel>
 
