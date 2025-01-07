@@ -226,12 +226,13 @@ export function registerRoutes(app: Express): Server {
         return res.status(403).send("Not a member of this workspace");
       }
 
+      // Get only root messages (not thread replies)
       const channelMessages = await db
         .select()
         .from(messages)
         .where(and(
           eq(messages.channelId, channelId),
-          isNull(messages.parentId) // Only get top-level messages
+          isNull(messages.parentId)
         ))
         .orderBy(desc(messages.createdAt))
         .limit(50);
