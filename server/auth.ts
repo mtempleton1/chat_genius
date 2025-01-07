@@ -5,7 +5,14 @@ import session from "express-session";
 import createMemoryStore from "memorystore";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
-import { users, workspaceMembers, workspaces, organizations } from "@db/schema";
+import {
+  users,
+  workspaceMembers,
+  workspaces,
+  organizations,
+  channels,
+  channelMembers,
+} from "@db/schema";
 import { db } from "@db";
 import { eq, and } from "drizzle-orm";
 import { z } from "zod";
@@ -23,7 +30,7 @@ const crypto = {
     const suppliedPasswordBuf = (await scryptAsync(
       suppliedPassword,
       salt,
-      64
+      64,
     )) as Buffer;
     return timingSafeEqual(hashedPasswordBuf, suppliedPasswordBuf);
   },
@@ -50,12 +57,16 @@ const existingWorkspaceUserSchema = baseUserSchema.extend({
 });
 
 // Type guard functions
-function isNewWorkspaceRegistration(data: any): data is z.infer<typeof newWorkspaceUserSchema> {
-  return 'organization' in data && 'workspace' in data;
+function isNewWorkspaceRegistration(
+  data: any,
+): data is z.infer<typeof newWorkspaceUserSchema> {
+  return "organization" in data && "workspace" in data;
 }
 
-function isExistingWorkspaceRegistration(data: any): data is z.infer<typeof existingWorkspaceUserSchema> {
-  return 'workspaceId' in data && typeof data.workspaceId === 'number';
+function isExistingWorkspaceRegistration(
+  data: any,
+): data is z.infer<typeof existingWorkspaceUserSchema> {
+  return "workspaceId" in data && typeof data.workspaceId === "number";
 }
 
 // Base user type from database
@@ -92,7 +103,7 @@ export function setupAuth(app: Express) {
     cookie: {
       secure: app.get("env") === "production",
       sameSite: "lax",
-      maxAge: 24 * 60 * 60 * 1000 // 24 hours
+      maxAge: 24 * 60 * 60 * 1000, // 24 hours
     },
     store: new MemoryStore({
       checkPeriod: 86400000, // prune expired entries every 24h
@@ -129,44 +140,52 @@ export function setupAuth(app: Express) {
       } catch (err) {
         return done(err);
       }
-    })
+    }),
   );
 
   passport.serializeUser((user: Express.User, done) => {
     done(null, { id: user.id, workspaceId: user.workspaceId });
   });
 
-  passport.deserializeUser(async (data: { id: number; workspaceId?: number }, done) => {
-    try {
-      const [user] = await db
-        .select()
-        .from(users)
-        .where(eq(users.id, data.id))
-        .limit(1);
+  passport.deserializeUser(
+    async (data: { id: number; workspaceId?: number }, done) => {
+      try {
+        const [user] = await db
+          .select()
+          .from(users)
+          .where(eq(users.id, data.id))
+          .limit(1);
 
-      if (user) {
-        (user as User).workspaceId = data.workspaceId;
+        if (user) {
+          (user as User).workspaceId = data.workspaceId;
+        }
+        done(null, user);
+      } catch (err) {
+        done(err);
       }
-      done(null, user);
-    } catch (err) {
-      done(err);
-    }
-  });
+    },
+  );
 
   app.post("/api/register", async (req, res, next) => {
     try {
-      let validatedData: z.infer<typeof newWorkspaceUserSchema> | z.infer<typeof existingWorkspaceUserSchema>;
+      let validatedData:
+        | z.infer<typeof newWorkspaceUserSchema>
+        | z.infer<typeof existingWorkspaceUserSchema>;
 
-      if ('workspaceId' in req.body && req.body.workspaceId) {
+      if ("workspaceId" in req.body && req.body.workspaceId) {
         const result = existingWorkspaceUserSchema.safeParse(req.body);
         if (!result.success) {
-          return res.status(400).send("Invalid input for workspace registration");
+          return res
+            .status(400)
+            .send("Invalid input for workspace registration");
         }
         validatedData = result.data;
       } else {
         const result = newWorkspaceUserSchema.safeParse(req.body);
         if (!result.success) {
-          return res.status(400).send("Invalid input for new organization registration");
+          return res
+            .status(400)
+            .send("Invalid input for new organization registration");
         }
         validatedData = result.data;
       }
@@ -208,29 +227,29 @@ export function setupAuth(app: Express) {
           return res.status(404).send("Workspace not found");
         }
 
-        await db
-          .insert(workspaceMembers)
-          .values({
-            userId: newUser.id,
-            workspaceId: validatedData.workspaceId,
-            role: "member",
-          });
+        await db.insert(workspaceMembers).values({
+          userId: newUser.id,
+          workspaceId: validatedData.workspaceId,
+          role: "member",
+        });
 
         // Add user to all default channels in the workspace
         const defaultChannels = await db
           .select()
           .from(channels)
-          .where(and(
-            eq(channels.workspaceId, validatedData.workspaceId),
-            eq(channels.joinByDefault, true)
-          ));
+          .where(
+            and(
+              eq(channels.workspaceId, validatedData.workspaceId),
+              eq(channels.joinByDefault, true),
+            ),
+          );
 
         if (defaultChannels.length > 0) {
           await db.insert(channelMembers).values(
-            defaultChannels.map(channel => ({
+            defaultChannels.map((channel) => ({
               userId: newUser.id,
               channelId: channel.id,
-            }))
+            })),
           );
         }
 
@@ -247,13 +266,11 @@ export function setupAuth(app: Express) {
           .values({ name: validatedData.workspace, organizationId: org.id })
           .returning();
 
-        await db
-          .insert(workspaceMembers)
-          .values({
-            userId: newUser.id,
-            workspaceId: ws.id,
-            role: "owner",
-          });
+        await db.insert(workspaceMembers).values({
+          userId: newUser.id,
+          workspaceId: ws.id,
+          role: "owner",
+        });
 
         newWorkspaceId = ws.id;
       }
@@ -267,7 +284,7 @@ export function setupAuth(app: Express) {
           user: {
             id: newUser.id,
             username: newUser.username,
-            workspaceId: newWorkspaceId
+            workspaceId: newWorkspaceId,
           },
         });
       });
@@ -277,52 +294,62 @@ export function setupAuth(app: Express) {
   });
 
   app.post("/api/login", (req, res, next) => {
-    const loginData = z.object({
-      username: z.string().min(1, "Username is required"),
-      password: z.string().min(1, "Password is required"),
-      workspaceId: z.number().optional(),
-    }).safeParse(req.body);
+    const loginData = z
+      .object({
+        username: z.string().min(1, "Username is required"),
+        password: z.string().min(1, "Password is required"),
+        workspaceId: z.number().optional(),
+      })
+      .safeParse(req.body);
 
     if (!loginData.success) {
       return res
         .status(400)
-        .send("Invalid input: " + loginData.error.issues.map(i => i.message).join(", "));
+        .send(
+          "Invalid input: " +
+            loginData.error.issues.map((i) => i.message).join(", "),
+        );
     }
 
-    passport.authenticate("local", async (err: any, user: Express.User, info: IVerifyOptions) => {
-      if (err) return next(err);
-      if (!user) return res.status(400).send(info.message ?? "Login failed");
+    passport.authenticate(
+      "local",
+      async (err: any, user: Express.User, info: IVerifyOptions) => {
+        if (err) return next(err);
+        if (!user) return res.status(400).send(info.message ?? "Login failed");
 
-      // If workspaceId is provided, verify membership
-      if (loginData.data.workspaceId) {
-        const [member] = await db
-          .select()
-          .from(workspaceMembers)
-          .where(and(
-            eq(workspaceMembers.userId, user.id),
-            eq(workspaceMembers.workspaceId, loginData.data.workspaceId)
-          ))
-          .limit(1);
+        // If workspaceId is provided, verify membership
+        if (loginData.data.workspaceId) {
+          const [member] = await db
+            .select()
+            .from(workspaceMembers)
+            .where(
+              and(
+                eq(workspaceMembers.userId, user.id),
+                eq(workspaceMembers.workspaceId, loginData.data.workspaceId),
+              ),
+            )
+            .limit(1);
 
-        if (!member) {
-          return res.status(403).send("Not a member of this workspace");
+          if (!member) {
+            return res.status(403).send("Not a member of this workspace");
+          }
+
+          user.workspaceId = loginData.data.workspaceId;
         }
 
-        user.workspaceId = loginData.data.workspaceId;
-      }
-
-      req.logIn(user, (err) => {
-        if (err) return next(err);
-        return res.json({
-          message: "Login successful",
-          user: {
-            id: user.id,
-            username: user.username,
-            workspaceId: user.workspaceId
-          },
+        req.logIn(user, (err) => {
+          if (err) return next(err);
+          return res.json({
+            message: "Login successful",
+            user: {
+              id: user.id,
+              username: user.username,
+              workspaceId: user.workspaceId,
+            },
+          });
         });
-      });
-    })(req, res, next);
+      },
+    )(req, res, next);
   });
 
   app.post("/api/logout", (req, res) => {
