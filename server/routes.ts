@@ -54,6 +54,30 @@ export function registerRoutes(app: Express): Server {
   // Setup WebSocket after creating HTTP server but before registering routes
   setupWebSocket(httpServer);
 
+  // Add status update endpoint
+  app.post("/api/user/status", async (req, res) => {
+    const user = req.user as Express.User;
+    if (!user) return res.status(401).send("Not authenticated");
+
+    const { status } = req.body;
+    if (typeof status !== "string") {
+      return res.status(400).send("Status must be a string");
+    }
+
+    try {
+      const [updatedUser] = await db
+        .update(users)
+        .set({ status })
+        .where(eq(users.id, user.id))
+        .returning();
+
+      res.json(updatedUser);
+    } catch (error) {
+      console.error("Error updating user status:", error);
+      res.status(500).send("Internal server error");
+    }
+  });
+
   // Add endpoint to get user's workspaces
   app.get("/api/user/workspaces", async (req, res) => {
     const user = req.user as Express.User;
