@@ -226,14 +226,11 @@ export function registerRoutes(app: Express): Server {
         return res.status(403).send("Not a member of this workspace");
       }
 
-      // Get only root messages (not thread replies)
+      // Get messages for this channel
       const channelMessages = await db
         .select()
         .from(messages)
-        .where(and(
-          eq(messages.channelId, channelId),
-          isNull(messages.parentId)
-        ))
+        .where(eq(messages.channelId, channelId))
         .orderBy(desc(messages.createdAt))
         .limit(50);
 
@@ -339,7 +336,7 @@ export function registerRoutes(app: Express): Server {
     }
 
     try {
-      // First get the parent message with full details
+      // Get the parent message and its replies with full details
       const parentMessage = await db.query.messages.findFirst({
         where: eq(messages.id, messageId),
         with: {
@@ -356,7 +353,7 @@ export function registerRoutes(app: Express): Server {
         return res.status(404).send("Thread not found");
       }
 
-      // Then get all replies in chronological order
+      // Get all messages in this thread ordered chronologically
       const replies = await db.query.messages.findMany({
         where: eq(messages.parentId, messageId),
         with: {
