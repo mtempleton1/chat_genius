@@ -97,7 +97,7 @@ export function setupWebSocket(server: HttpServer) {
               createdAt: new Date().toISOString(),
               reactions: [],
             };
-            
+
             // Broadcast to channel members
             broadcastToChannel(data.channelId, messageData);
 
@@ -105,7 +105,7 @@ export function setupWebSocket(server: HttpServer) {
             if (data.parentId) {
               broadcastToChannel(data.channelId, {
                 ...messageData,
-                type: "thread_message"
+                type: "thread_message",
               });
             }
 
@@ -188,7 +188,7 @@ export function setupWebSocket(server: HttpServer) {
     channelMemberIds.forEach(({ userId }) => {
       const client = clients.get(userId);
       console.log("HERE");
-      // console.log(client);
+      console.log(client);
       console.log(client?.readyState, WebSocket.OPEN);
       if (client?.readyState === WebSocket.OPEN) {
         console.log("SSECINDG....");
