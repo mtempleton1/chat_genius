@@ -1,12 +1,15 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Message } from "@db/schema";
 
-export function useMessages(channelId: number) {
+export function useMessages(channelId: number | null, threadId?: number) {
   const queryClient = useQueryClient();
+  const queryKey = threadId 
+    ? [`/api/messages/${threadId}/thread`]
+    : [`/api/channels/${channelId}/messages`];
 
   const { data: messages, isLoading } = useQuery<Message[]>({
-    queryKey: [`/api/channels/${channelId}/messages`],
-    enabled: channelId > 0,
+    queryKey,
+    enabled: (channelId !== null && channelId > 0) || (threadId !== undefined && threadId > 0),
   });
 
   const sendMessage = useMutation({
@@ -14,7 +17,11 @@ export function useMessages(channelId: number) {
       const response = await fetch("/api/messages", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content, channelId }),
+        body: JSON.stringify({ 
+          content, 
+          channelId,
+          parentId: threadId // Add parentId for thread messages
+        }),
         credentials: "include",
       });
 
@@ -26,7 +33,7 @@ export function useMessages(channelId: number) {
     },
     onSuccess: (newMessage) => {
       // Optimistically update the messages cache
-      queryClient.setQueryData<Message[]>([`/api/channels/${channelId}/messages`], (old) => {
+      queryClient.setQueryData<Message[]>(queryKey, (old) => {
         if (!old) return [newMessage];
         return [...old, newMessage];
       });
@@ -50,7 +57,7 @@ export function useMessages(channelId: number) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: [`/api/channels/${channelId}/messages`],
+        queryKey,
       });
     },
   });

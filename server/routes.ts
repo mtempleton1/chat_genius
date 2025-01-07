@@ -4,7 +4,7 @@ import { setupAuth } from "./auth";
 import { setupWebSocket } from "./websocket";
 import { db } from "@db";
 import { channels, messages, reactions, channelMembers } from "@db/schema";
-import { eq, and, asc } from "drizzle-orm";
+import { eq, and, asc, or, desc } from "drizzle-orm";
 import multer from "multer";
 
 // Configure multer for file uploads
@@ -66,32 +66,87 @@ export function registerRoutes(app: Express): Server {
   app.get("/api/channels/:channelId/messages", async (req, res) => {
     if (!req.user) return res.status(401).send("Not authenticated");
 
-    const channelMessages = await db.query.messages.findMany({
-      where: eq(messages.channelId, parseInt(req.params.channelId)),
-      with: {
-        user: true,
-        reactions: {
+    const channelMessages = await db
+      .select()
+      .from(messages)
+      .where(
+        and(
+          eq(messages.channelId, parseInt(req.params.channelId)),
+          eq(messages.parentId, null) // Only get top-level messages
+        )
+      )
+      .orderBy(desc(messages.createdAt))
+      .limit(50);
+
+    // Get user and reaction info for each message
+    const enrichedMessages = await Promise.all(
+      channelMessages.map(async (message) => {
+        const [enriched] = await db.query.messages.findMany({
+          where: eq(messages.id, message.id),
           with: {
             user: true,
+            reactions: {
+              with: {
+                user: true,
+              },
+            },
           },
-        },
-      },
-      orderBy: asc(messages.createdAt),
-      limit: 50,
-    });
+          limit: 1,
+        });
+        return enriched;
+      })
+    );
 
-    res.json(channelMessages.reverse());
+    res.json(enrichedMessages);
+  });
+
+  app.get("/api/messages/:messageId/thread", async (req, res) => {
+    if (!req.user) return res.status(401).send("Not authenticated");
+
+    const messageId = parseInt(req.params.messageId);
+    const threadMessages = await db
+      .select()
+      .from(messages)
+      .where(
+        or(
+          eq(messages.id, messageId),
+          eq(messages.parentId, messageId)
+        )
+      )
+      .orderBy(asc(messages.createdAt));
+
+    // Get user and reaction info for each message
+    const enrichedMessages = await Promise.all(
+      threadMessages.map(async (message) => {
+        const [enriched] = await db.query.messages.findMany({
+          where: eq(messages.id, message.id),
+          with: {
+            user: true,
+            reactions: {
+              with: {
+                user: true,
+              },
+            },
+          },
+          limit: 1,
+        });
+        return enriched;
+      })
+    );
+
+    res.json(enrichedMessages);
   });
 
   app.post("/api/messages", async (req, res) => {
     if (!req.user) return res.status(401).send("Not authenticated");
 
-    const { content, channelId } = req.body;
+    const { content, channelId, parentId } = req.body;
     const [message] = await db
       .insert(messages)
       .values({
         content,
         channelId,
+        parentId: parentId || null,
         userId: req.user.id,
       })
       .returning();

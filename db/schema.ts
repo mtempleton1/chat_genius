@@ -9,6 +9,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { relations } from "drizzle-orm";
+import type { InferModel } from 'drizzle-orm';
 
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
@@ -46,6 +47,7 @@ export const messages = pgTable("messages", {
   content: text("content").notNull(),
   userId: integer("user_id").references(() => users.id),
   channelId: integer("channel_id").references(() => channels.id),
+  parentId: integer("parent_id").references(() => messages.id),
   attachments: jsonb("attachments").$type<{ url: string; name: string }[]>(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -75,17 +77,6 @@ export const channelsRelations = relations(channels, ({ many, one }) => ({
   })
 }));
 
-export const channelMembersRelations = relations(channelMembers, ({ one }) => ({
-  channel: one(channels, {
-    fields: [channelMembers.channelId],
-    references: [channels.id],
-  }),
-  user: one(users, {
-    fields: [channelMembers.userId],
-    references: [users.id],
-  })
-}));
-
 export const messagesRelations = relations(messages, ({ one, many }) => ({
   user: one(users, {
     fields: [messages.userId],
@@ -95,7 +86,26 @@ export const messagesRelations = relations(messages, ({ one, many }) => ({
     fields: [messages.channelId],
     references: [channels.id],
   }),
+  parent: one(messages, {
+    fields: [messages.parentId],
+    references: [messages.id],
+  }),
+  replies: many(messages, {
+    fields: [messages.id],
+    references: [messages.parentId],
+  }),
   reactions: many(reactions)
+}));
+
+export const channelMembersRelations = relations(channelMembers, ({ one }) => ({
+  channel: one(channels, {
+    fields: [channelMembers.channelId],
+    references: [channels.id],
+  }),
+  user: one(users, {
+    fields: [channelMembers.userId],
+    references: [users.id],
+  })
 }));
 
 export const reactionsRelations = relations(reactions, ({ one }) => ({
@@ -119,7 +129,7 @@ export const selectChannelSchema = createSelectSchema(channels);
 export const insertMessageSchema = createInsertSchema(messages);
 export const selectMessageSchema = createSelectSchema(messages);
 
-export type User = typeof users.$inferSelect;
-export type Channel = typeof channels.$inferSelect;
-export type Message = typeof messages.$inferSelect;
-export type Reaction = typeof reactions.$inferSelect;
+export type User = InferModel<typeof users>;
+export type Channel = InferModel<typeof channels>;
+export type Message = InferModel<typeof messages>;
+export type Reaction = InferModel<typeof reactions>;
