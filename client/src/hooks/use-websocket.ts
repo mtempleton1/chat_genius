@@ -7,11 +7,17 @@ type WebSocketMessage = {
   [key: string]: any;
 };
 
+type MessageHandler = {
+  id: string;
+  scope: string;
+  handler: (message: WebSocketMessage) => void;
+};
+
 export function useWebSocket() {
   const { user } = useUser();
   const { toast } = useToast();
   const wsRef = useRef<WebSocket | null>(null);
-  const messageHandlersRef = useRef<((message: WebSocketMessage) => void)[]>([]);
+  const messageHandlersRef = useRef<MessageHandler[]>([]);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout>();
   const reconnectAttemptsRef = useRef(0);
   const maxReconnectAttempts = 5;
@@ -22,7 +28,8 @@ export function useWebSocket() {
 
     isConnectingRef.current = true;
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = `${protocol}//${window.location.host}/ws`;
+    const host = window.location.host;
+    const wsUrl = `${protocol}//${host}/ws`;
 
     console.log("Attempting WebSocket connection to:", wsUrl);
     const ws = new WebSocket(wsUrl);
@@ -42,11 +49,14 @@ export function useWebSocket() {
     ws.onmessage = (event) => {
       try {
         const message = JSON.parse(event.data);
+        console.log("WebSocket received message:", message);
+
         if (message.type === "auth_success") {
-          console.log("Authentication successful");
+          console.log("WebSocket authentication successful");
         }
+
         // Call all registered message handlers
-        messageHandlersRef.current.forEach((handler) => {
+        messageHandlersRef.current.forEach(({ handler }) => {
           try {
             handler(message);
           } catch (handlerError) {
@@ -58,8 +68,8 @@ export function useWebSocket() {
       }
     };
 
-    ws.onclose = () => {
-      console.log("WebSocket disconnected");
+    ws.onclose = (event) => {
+      console.log("WebSocket disconnected", event);
       wsRef.current = null;
       isConnectingRef.current = false;
 
@@ -71,7 +81,7 @@ export function useWebSocket() {
         const timeout = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 10000);
         reconnectAttemptsRef.current++;
 
-        console.log(`Attempting to reconnect in ${timeout}ms`);
+        console.log(`Attempting to reconnect in ${timeout}ms (attempt ${reconnectAttemptsRef.current}/${maxReconnectAttempts})`);
         reconnectTimeoutRef.current = setTimeout(() => {
           connect();
         }, timeout);
@@ -101,6 +111,7 @@ export function useWebSocket() {
         user &&
         (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN)
       ) {
+        console.log("Page became visible, attempting to reconnect WebSocket");
         reconnectAttemptsRef.current = 0;
         connect();
       }
@@ -114,6 +125,7 @@ export function useWebSocket() {
         clearTimeout(reconnectTimeoutRef.current);
       }
       if (wsRef.current) {
+        console.log("Cleaning up WebSocket connection");
         wsRef.current.close();
       }
     };
@@ -122,16 +134,20 @@ export function useWebSocket() {
   const sendMessage = useCallback(
     (message: WebSocketMessage) => {
       if (wsRef.current?.readyState === WebSocket.OPEN) {
+        console.log("Sending WebSocket message:", message);
         wsRef.current.send(JSON.stringify(message));
       } else {
+        console.log("WebSocket not ready, attempting reconnection");
         if (!wsRef.current || wsRef.current.readyState === WebSocket.CLOSED) {
           connect();
         }
         // Wait for connection and retry sending
         setTimeout(() => {
           if (wsRef.current?.readyState === WebSocket.OPEN) {
+            console.log("Retrying WebSocket message:", message);
             wsRef.current.send(JSON.stringify(message));
           } else {
+            console.error("Failed to send WebSocket message after retry");
             toast({
               title: "Connection Error",
               description: "Unable to send message. Please try again.",
@@ -145,11 +161,20 @@ export function useWebSocket() {
   );
 
   const addMessageHandler = useCallback(
-    (handler: (message: WebSocketMessage) => void) => {
-      messageHandlersRef.current.push(handler);
+    (handler: (message: WebSocketMessage) => void, scope: string = 'global') => {
+      const handlerId = Math.random().toString(36).substring(7);
+      console.log(`Adding new WebSocket message handler (${handlerId}) for scope: ${scope}`);
+
+      messageHandlersRef.current.push({
+        id: handlerId,
+        scope,
+        handler,
+      });
+
       return () => {
+        console.log(`Removing WebSocket message handler (${handlerId}) from scope: ${scope}`);
         messageHandlersRef.current = messageHandlersRef.current.filter(
-          (h) => h !== handler,
+          (h) => h.id !== handlerId,
         );
       };
     },

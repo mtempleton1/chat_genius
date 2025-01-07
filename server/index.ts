@@ -50,6 +50,8 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // ALWAYS use port 5000 for consistency
+  const PORT = 5000;
   const server = registerRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
@@ -65,17 +67,7 @@ app.use((req, res, next) => {
     serveStatic(app);
   }
 
-  // Use environment port or fallback to 5000
-  const PORT = parseInt(process.env.PORT || "5000", 10);
-
-  server.on('error', (e: any) => {
-    if (e.code === 'EADDRINUSE') {
-      console.error(`Port ${PORT} is already in use`);
-      process.exit(1);
-    }
-  });
-
   server.listen(PORT, "0.0.0.0", () => {
-    log(`serving on port ${PORT}`);
+    log(`Server started on port ${PORT}`);
   });
 })();

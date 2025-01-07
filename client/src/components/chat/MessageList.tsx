@@ -25,6 +25,7 @@ export default function MessageList({
   const { addMessageHandler, sendMessage: sendWebSocketMessage } = useWebSocket();
   const scrollRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
+  const handlerRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     const scrollElement = scrollRef.current;
@@ -33,50 +34,83 @@ export default function MessageList({
     }
   }, [messages]);
 
+  // Set up WebSocket handler for channel messages
   useEffect(() => {
     if (!channelId) return;
 
-    const handler = (msg: any) => {
-      // Only handle non-thread messages or thread parent messages
-      if (msg.type === "message" && msg.channelId === channelId && !msg.parentId) {
-        queryClient.setQueryData<Message[]>(
-          [`/api/channels/${channelId}/messages`],
-          (oldMessages = []) => {
-            const messageId = msg.newMessage?.id || msg.id;
-            if (!messageId) return oldMessages;
+    // Remove existing handler if any
+    if (handlerRef.current) {
+      handlerRef.current();
+      handlerRef.current = null;
+    }
 
-            // Check if message already exists
-            const messageExists = oldMessages.some((m) => m.id === messageId);
-            if (messageExists) {
-              return oldMessages.map((m) =>
-                m.id === messageId ? { ...m, ...msg.newMessage } : m,
+    // Add new handler for channel messages
+    const cleanup = addMessageHandler((msg) => {
+      try {
+        // Handle regular channel messages only, including thread updates
+        if (msg.type === "message" && msg.channelId === channelId) {
+          console.log("Received channel message:", msg);
+          queryClient.setQueryData<Message[]>(
+            [`/api/channels/${channelId}/messages`],
+            (oldMessages = []) => {
+              if (!oldMessages) return [msg.newMessage];
+
+              const messageId = msg.newMessage?.id || msg.id;
+              if (!messageId) return oldMessages;
+
+              // Check if message already exists
+              const messageExists = oldMessages.some((m) => m.id === messageId);
+              if (messageExists) {
+                return oldMessages.map((m) =>
+                  m.id === messageId ? { ...m, ...msg.newMessage } : m,
+                );
+              }
+
+              const newMessage = msg.newMessage || msg;
+              return [...oldMessages, newMessage].sort(
+                (a, b) =>
+                  new Date(a.createdAt!).getTime() -
+                  new Date(b.createdAt!).getTime(),
               );
-            }
+            },
+          );
+        }
+      } catch (error) {
+        console.error("Error handling channel message:", error);
+      }
+    }, `channel-${channelId}`);
 
-            const newMessage = msg.newMessage || msg;
-            return [...oldMessages, newMessage].sort(
-              (a, b) =>
-                new Date(a.createdAt!).getTime() -
-                new Date(b.createdAt!).getTime(),
-            );
-          },
-        );
+    // Store the cleanup function
+    handlerRef.current = cleanup;
+
+    // Return cleanup function
+    return () => {
+      if (handlerRef.current) {
+        console.log("Cleaning up channel message handler");
+        handlerRef.current();
+        handlerRef.current = null;
       }
     };
-
-    const cleanup = addMessageHandler(handler);
-    return cleanup;
   }, [channelId, queryClient, addMessageHandler]);
 
   const handleSendMessage = async (content: string) => {
     if (!channelId) return;
 
-    const newMessage = await sendMessage({ content });
-    sendWebSocketMessage({
-      type: "message",
-      channelId,
-      newMessage,
-    });
+    try {
+      const newMessage = await sendMessage({ content });
+      console.log("Sending channel message:", {
+        type: "message",
+        channelId,
+        newMessage,
+      });
+      sendWebSocketMessage({
+        type: "message",
+        channelId,
+        newMessage,
+      });
+    } catch (error) {
+      console.error("Error sending channel message:", error);
+    }
   };
 
   if (!channelId) {
@@ -141,11 +175,7 @@ type MessageItemProps = {
   onReactionAdd: (emoji: string) => void;
 };
 
-function MessageItem({
-  message,
-  onThreadSelect,
-  onReactionAdd,
-}: MessageItemProps) {
+function MessageItem({ message, onThreadSelect, onReactionAdd }: MessageItemProps) {
   if (!message.user) return null;
 
   return (

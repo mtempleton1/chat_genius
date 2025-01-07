@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMessages } from "@/hooks/use-messages";
 import { useWebSocket } from "@/hooks/use-websocket";
@@ -17,38 +17,101 @@ type ThreadViewProps = {
 
 export default function ThreadView({ messageId, onClose }: ThreadViewProps) {
   const { messages, isLoading, sendMessage } = useMessages(messageId, true);
-  const { addMessageHandler } = useWebSocket();
+  const { addMessageHandler, sendMessage: sendWebSocketMessage } = useWebSocket();
   const queryClient = useQueryClient();
+  const handlerRef = useRef<(() => void) | null>(null);
 
+  // Set up WebSocket handler for thread messages
   useEffect(() => {
-    // Only handle thread-specific messages
-    return addMessageHandler((msg) => {
-      if (msg.type === "thread_message" && msg.parentId === messageId) {
-        queryClient.setQueryData<Message[]>(
-          [`/api/messages/${messageId}/thread`],
-          (oldMessages = []) => {
-            const newMessage = {
-              id: msg.id || msg.messageId,
-              content: msg.content,
-              userId: msg.userId,
-              channelId: msg.channelId,
-              parentId: msg.parentId,
-              createdAt: new Date().toISOString(),
-              user: msg.user,
-              reactions: []
-            };
+    console.log("Setting up thread message handler for messageId:", messageId);
 
-            // Check if message already exists
-            if (oldMessages.some(m => m.id === newMessage.id)) {
-              return oldMessages;
+    // Remove existing handler if any
+    if (handlerRef.current) {
+      handlerRef.current();
+      handlerRef.current = null;
+    }
+
+    const cleanup = addMessageHandler((msg) => {
+      try {
+        // Only handle thread messages for this specific thread
+        if (msg.type === "thread_message" && msg.parentId === messageId) {
+          console.log("Received thread message:", msg);
+          queryClient.setQueryData<Message[]>(
+            [`/api/messages/${messageId}/thread`],
+            (oldMessages = []) => {
+              if (!oldMessages) return [msg];
+
+              const newMessage = {
+                id: msg.messageId,
+                content: msg.content,
+                userId: msg.userId,
+                channelId: msg.channelId,
+                parentId: msg.parentId,
+                createdAt: msg.createdAt || new Date().toISOString(),
+                user: msg.user,
+                reactions: [],
+                attachments: msg.attachments || null,
+                updatedAt: msg.createdAt || new Date().toISOString()
+              };
+
+              // Check if message already exists
+              if (oldMessages.some(m => m.id === newMessage.id)) {
+                return oldMessages;
+              }
+
+              return [...oldMessages, newMessage];
             }
-
-            return [...oldMessages, newMessage];
-          }
-        );
+          );
+        }
+      } catch (error) {
+        console.error("Error handling thread message:", error);
       }
-    });
-  }, [addMessageHandler, messageId, queryClient]);
+    }, `thread-${messageId}`);
+
+    // Store cleanup function
+    handlerRef.current = cleanup;
+
+    return () => {
+      console.log("Cleaning up thread message handler for messageId:", messageId);
+      if (handlerRef.current) {
+        handlerRef.current();
+        handlerRef.current = null;
+      }
+    };
+  }, [messageId, queryClient, addMessageHandler]);
+
+  const handleSendMessage = async (content: string) => {
+    if (!messageId) return;
+
+    try {
+      const newMessage = await sendMessage({ content, parentId: messageId });
+      console.log("Sending thread message:", {
+        type: "thread_message",
+        channelId: newMessage.channelId,
+        messageId: newMessage.id,
+        parentId: messageId,
+        content: newMessage.content,
+        userId: newMessage.userId,
+        user: newMessage.user,
+        createdAt: newMessage.createdAt
+      });
+
+      // Broadcast the message through WebSocket
+      sendWebSocketMessage({
+        type: "thread_message",
+        channelId: newMessage.channelId,
+        messageId: newMessage.id,
+        parentId: messageId,
+        content: newMessage.content,
+        userId: newMessage.userId,
+        user: newMessage.user,
+        attachments: newMessage.attachments,
+        createdAt: newMessage.createdAt
+      });
+    } catch (error) {
+      console.error("Error sending thread message:", error);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -91,7 +154,7 @@ export default function ThreadView({ messageId, onClose }: ThreadViewProps) {
 
       <div className="p-4 border-t">
         <MessageInput
-          onSendMessage={(content) => sendMessage({ content, parentId: messageId })}
+          onSendMessage={handleSendMessage}
           fileUploadComponent={<FileUpload channelId={parentMessage.channelId!} />}
         />
       </div>

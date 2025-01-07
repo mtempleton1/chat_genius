@@ -85,21 +85,23 @@ export function setupWebSocket(server: HttpServer) {
               // Broadcast to channel members with thread_message type
               broadcastToChannel(channelId, {
                 type: "thread_message",
-                ...data.newMessage,
-              });
-
-              // Also broadcast as a regular message to update thread counts/indicators
-              broadcastToChannel(channelId, {
-                type: "message",
-                ...data.newMessage,
-              });
-            } else {
-              // Regular channel message
-              broadcastToChannel(channelId, {
-                type: "message",
-                ...data.newMessage,
+                messageId: data.newMessage.id,
+                channelId: channelId,
+                parentId: parentId,
+                content: data.newMessage.content,
+                userId: data.newMessage.userId,
+                user: data.newMessage.user,
+                attachments: data.newMessage.attachments,
+                createdAt: data.newMessage.createdAt
               });
             }
+
+            // Always broadcast channel message (for thread count updates)
+            broadcastToChannel(channelId, {
+              type: "message",
+              channelId: channelId,
+              newMessage: data.newMessage
+            });
 
             // Send confirmation back to sender
             ws.send(
