@@ -3,10 +3,19 @@ import { createServer, type Server } from "http";
 import { setupAuth } from "./auth";
 import { setupWebSocket } from "./websocket";
 import { db } from "@db";
-import { channels, messages, reactions, channelMembers, organizations, workspaces, workspaceMembers, users } from "@db/schema";
+import {
+  channels,
+  messages,
+  reactions,
+  channelMembers,
+  organizations,
+  workspaces,
+  workspaceMembers,
+  users,
+} from "@db/schema";
 import { eq, and, asc, or, desc, isNull } from "drizzle-orm";
 import multer from "multer";
-import type { InferModel } from 'drizzle-orm';
+import type { InferModel } from "drizzle-orm";
 
 // Type definitions
 type Workspace = InferModel<typeof workspaces>;
@@ -61,7 +70,10 @@ export function registerRoutes(app: Express): Server {
           organization: organizations,
         })
         .from(workspaces)
-        .leftJoin(organizations, eq(workspaces.organizationId, organizations.id))
+        .leftJoin(
+          organizations,
+          eq(workspaces.organizationId, organizations.id),
+        )
         .where(eq(workspaces.id, workspaceId))
         .limit(1);
 
@@ -75,10 +87,12 @@ export function registerRoutes(app: Express): Server {
         const [member] = await db
           .select()
           .from(workspaceMembers)
-          .where(and(
-            eq(workspaceMembers.workspaceId, workspaceId),
-            eq(workspaceMembers.userId, user.id)
-          ))
+          .where(
+            and(
+              eq(workspaceMembers.workspaceId, workspaceId),
+              eq(workspaceMembers.userId, user.id),
+            ),
+          )
           .limit(1);
 
         if (member) {
@@ -113,6 +127,7 @@ export function registerRoutes(app: Express): Server {
   });
 
   app.get("/api/workspaces/:workspaceId/channels", async (req, res) => {
+    console.log("BALAHABALAHAAHHFHFKLDFDHLDFLH");
     const user = req.user as Express.User;
     if (!user) return res.status(401).send("Not authenticated");
 
@@ -125,7 +140,7 @@ export function registerRoutes(app: Express): Server {
     const member = await db.query.workspaceMembers.findFirst({
       where: and(
         eq(workspaceMembers.workspaceId, workspaceId),
-        eq(workspaceMembers.userId, user.id)
+        eq(workspaceMembers.userId, user.id),
       ),
     });
 
@@ -158,7 +173,7 @@ export function registerRoutes(app: Express): Server {
     const member = await db.query.workspaceMembers.findFirst({
       where: and(
         eq(workspaceMembers.workspaceId, workspaceId),
-        eq(workspaceMembers.userId, user.id)
+        eq(workspaceMembers.userId, user.id),
       ),
     });
 
@@ -186,9 +201,10 @@ export function registerRoutes(app: Express): Server {
   });
 
   app.get("/api/channels/:channelId/messages", async (req, res) => {
+    console.log("ARE WE GETTTTING HERERERERERERERE???????");
+
     const user = req.user as Express.User;
     if (!user) return res.status(401).send("Not authenticated");
-
     const channelId = parseInt(req.params.channelId);
     if (isNaN(channelId)) {
       return res.status(400).send("Invalid channel ID");
@@ -216,10 +232,12 @@ export function registerRoutes(app: Express): Server {
       const [workspaceMember] = await db
         .select()
         .from(workspaceMembers)
-        .where(and(
-          eq(workspaceMembers.workspaceId, channel.workspaceId),
-          eq(workspaceMembers.userId, user.id)
-        ))
+        .where(
+          and(
+            eq(workspaceMembers.workspaceId, channel.workspaceId),
+            eq(workspaceMembers.userId, user.id),
+          ),
+        )
         .limit(1);
 
       if (!workspaceMember) {
@@ -230,10 +248,9 @@ export function registerRoutes(app: Express): Server {
       const channelMessages = await db
         .select()
         .from(messages)
-        .where(and(
-          eq(messages.channelId, channelId),
-          isNull(messages.parentId)
-        ))
+        .where(
+          and(eq(messages.channelId, channelId), isNull(messages.parentId)),
+        )
         .orderBy(desc(messages.createdAt))
         .limit(50);
 
@@ -259,7 +276,7 @@ export function registerRoutes(app: Express): Server {
             reactions: messageReactions,
             user: messageUser,
           };
-        })
+        }),
       );
 
       res.json(messagesWithDetails);
@@ -296,13 +313,11 @@ export function registerRoutes(app: Express): Server {
       .returning();
 
     // Add creator as workspace member with owner role
-    await db
-      .insert(workspaceMembers)
-      .values({
-        userId: user.id,
-        workspaceId: workspace.id,
-        role: "owner",
-      });
+    await db.insert(workspaceMembers).values({
+      userId: user.id,
+      workspaceId: workspace.id,
+      role: "owner",
+    });
 
     res.json({ organization, workspace });
   });
@@ -318,13 +333,11 @@ export function registerRoutes(app: Express): Server {
       .returning();
 
     // Add creator as workspace member with owner role
-    await db
-      .insert(workspaceMembers)
-      .values({
-        userId: user.id,
-        workspaceId: workspace.id,
-        role: "owner",
-      });
+    await db.insert(workspaceMembers).values({
+      userId: user.id,
+      workspaceId: workspace.id,
+      role: "owner",
+    });
 
     res.json(workspace);
   });
@@ -357,15 +370,17 @@ export function registerRoutes(app: Express): Server {
       }
 
       const { workspace } = message[0];
-      
+
       // Verify workspace membership
       const [workspaceMember] = await db
         .select()
         .from(workspaceMembers)
-        .where(and(
-          eq(workspaceMembers.workspaceId, workspace.id),
-          eq(workspaceMembers.userId, user.id)
-        ))
+        .where(
+          and(
+            eq(workspaceMembers.workspaceId, workspace.id),
+            eq(workspaceMembers.userId, user.id),
+          ),
+        )
         .limit(1);
 
       if (!workspaceMember) {
@@ -379,10 +394,10 @@ export function registerRoutes(app: Express): Server {
           user: true,
           reactions: {
             with: {
-              user: true
-            }
-          }
-        }
+              user: true,
+            },
+          },
+        },
       });
 
       if (!parentMessage) {
@@ -396,11 +411,11 @@ export function registerRoutes(app: Express): Server {
           user: true,
           reactions: {
             with: {
-              user: true
-            }
-          }
+              user: true,
+            },
+          },
         },
-        orderBy: [asc(messages.createdAt)]
+        orderBy: [asc(messages.createdAt)],
       });
 
       // Return the thread with parent message first
@@ -427,7 +442,7 @@ export function registerRoutes(app: Express): Server {
       // If this is a thread message, verify parent message exists
       if (parentId) {
         const parentMessage = await db.query.messages.findFirst({
-          where: eq(messages.id, parentId)
+          where: eq(messages.id, parentId),
         });
 
         if (!parentMessage) {
@@ -452,10 +467,10 @@ export function registerRoutes(app: Express): Server {
           user: true,
           reactions: {
             with: {
-              user: true
-            }
-          }
-        }
+              user: true,
+            },
+          },
+        },
       });
 
       if (!completeMessage) {
@@ -503,28 +518,28 @@ export function registerRoutes(app: Express): Server {
     res.json(completeReaction);
   });
 
-  app.delete("/api/messages/:messageId/reactions/:reactionId", async (req, res) => {
-    const user = req.user as Express.User;
-    if (!user) return res.status(401).send("Not authenticated");
+  app.delete(
+    "/api/messages/:messageId/reactions/:reactionId",
+    async (req, res) => {
+      const user = req.user as Express.User;
+      if (!user) return res.status(401).send("Not authenticated");
 
-    const messageId = parseInt(req.params.messageId);
-    const reactionId = parseInt(req.params.reactionId);
+      const messageId = parseInt(req.params.messageId);
+      const reactionId = parseInt(req.params.reactionId);
 
-    if (isNaN(messageId) || isNaN(reactionId)) {
-      return res.status(400).send("Invalid message or reaction ID");
-    }
+      if (isNaN(messageId) || isNaN(reactionId)) {
+        return res.status(400).send("Invalid message or reaction ID");
+      }
 
-    await db
-      .delete(reactions)
-      .where(
-        and(
-          eq(reactions.id, reactionId),
-          eq(reactions.userId, user.id)
-        )
-      );
+      await db
+        .delete(reactions)
+        .where(
+          and(eq(reactions.id, reactionId), eq(reactions.userId, user.id)),
+        );
 
-    res.status(204).send();
-  });
+      res.status(204).send();
+    },
+  );
 
   return httpServer;
 }
