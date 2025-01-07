@@ -231,7 +231,7 @@ export function registerRoutes(app: Express): Server {
         .from(messages)
         .where(and(
           eq(messages.channelId, channelId),
-          isNull(messages.parentId)
+          isNull(messages.parentId) // Only get top-level messages
         ))
         .orderBy(desc(messages.createdAt))
         .limit(50);
