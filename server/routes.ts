@@ -339,7 +339,40 @@ export function registerRoutes(app: Express): Server {
     }
 
     try {
-      // First get the parent message with full details
+      // First get the parent message and its channel
+      const message = await db
+        .select({
+          message: messages,
+          channel: channels,
+          workspace: workspaces,
+        })
+        .from(messages)
+        .leftJoin(channels, eq(messages.channelId, channels.id))
+        .leftJoin(workspaces, eq(channels.workspaceId, workspaces.id))
+        .where(eq(messages.id, messageId))
+        .limit(1);
+
+      if (!message || !message[0]) {
+        return res.status(404).send("Message not found");
+      }
+
+      const { workspace } = message[0];
+      
+      // Verify workspace membership
+      const [workspaceMember] = await db
+        .select()
+        .from(workspaceMembers)
+        .where(and(
+          eq(workspaceMembers.workspaceId, workspace.id),
+          eq(workspaceMembers.userId, user.id)
+        ))
+        .limit(1);
+
+      if (!workspaceMember) {
+        return res.status(403).send("Not a member of this workspace");
+      }
+
+      // Get the parent message with full details
       const parentMessage = await db.query.messages.findFirst({
         where: eq(messages.id, messageId),
         with: {
