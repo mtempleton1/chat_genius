@@ -33,9 +33,21 @@ export default function MessageList({ channelId, onThreadSelect }: MessageListPr
 
     return addMessageHandler((msg) => {
       if (msg.type === "message" && msg.channelId === channelId) {
-        queryClient.invalidateQueries({
-          queryKey: [`/api/channels/${channelId}/messages`],
-        });
+        queryClient.setQueryData<Message[]>(
+          [`/api/channels/${channelId}/messages`],
+          (oldMessages) => {
+            if (!oldMessages) return [msg];
+            return [...oldMessages, {
+              id: msg.messageId,
+              content: msg.content,
+              userId: msg.userId,
+              channelId: msg.channelId,
+              createdAt: new Date().toISOString(),
+              user: msg.user,
+              reactions: []
+            }];
+          }
+        );
       }
     });
   }, [addMessageHandler, channelId, queryClient]);

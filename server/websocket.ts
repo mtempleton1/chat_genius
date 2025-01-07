@@ -75,12 +75,21 @@ export function setupWebSocket(server: HttpServer) {
           case "message":
             if (!ws.userId || !data.channelId) break;
 
+            // Get user details for the message
+            const [messageUser] = await db
+              .select()
+              .from(users)
+              .where(eq(users.id, ws.userId))
+              .limit(1);
+
             // Broadcast to channel members
             broadcastToChannel(data.channelId, {
               type: "message",
+              messageId: data.messageId,
               channelId: data.channelId,
               content: data.content,
-              userId: ws.userId
+              userId: ws.userId,
+              user: messageUser
             });
 
             // Send confirmation back to sender
