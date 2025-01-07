@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { setupAuth } from "./auth";
 import { setupWebSocket } from "./websocket";
 import { db } from "@db";
-import { channels, messages, reactions, channelMembers } from "@db/schema";
+import { channels, messages, reactions, channelMembers, organizations, workspaces, workspaceMembers } from "@db/schema";
 import { eq, and, asc, or, desc } from "drizzle-orm";
 import multer from "multer";
 
@@ -26,52 +26,193 @@ export function registerRoutes(app: Express): Server {
   const httpServer = createServer(app);
   setupWebSocket(httpServer);
 
-  // Channel routes
-  app.get("/api/channels", async (req, res) => {
-    if (!req.user) return res.status(401).send("Not authenticated");
+  // Organization and Workspace routes
+  app.post("/api/organizations", async (req, res) => {
+    const user = req.user as Express.User;
+    if (!user) return res.status(401).send("Not authenticated");
 
-    const userChannels = await db.query.channels.findMany({
+    const { name, domain } = req.body;
+    const [organization] = await db
+      .insert(organizations)
+      .values({ name, domain })
+      .returning();
+
+    // Create default workspace
+    const [workspace] = await db
+      .insert(workspaces)
+      .values({ name: "General", organizationId: organization.id })
+      .returning();
+
+    // Add creator as workspace member with owner role
+    await db
+      .insert(workspaceMembers)
+      .values({
+        userId: user.id,
+        workspaceId: workspace.id,
+        role: "owner",
+      });
+
+    res.json({ organization, workspace });
+  });
+
+  app.post("/api/workspaces", async (req, res) => {
+    const user = req.user as Express.User;
+    if (!user) return res.status(401).send("Not authenticated");
+
+    const { name, organizationId } = req.body;
+    const [workspace] = await db
+      .insert(workspaces)
+      .values({ name, organizationId })
+      .returning();
+
+    // Add creator as workspace member with owner role
+    await db
+      .insert(workspaceMembers)
+      .values({
+        userId: user.id,
+        workspaceId: workspace.id,
+        role: "owner",
+      });
+
+    res.json(workspace);
+  });
+
+  app.get("/api/workspaces/:workspaceId", async (req, res) => {
+    const user = req.user as Express.User;
+    if (!user) return res.status(401).send("Not authenticated");
+
+    const workspace = await db.query.workspaces.findFirst({
+      where: eq(workspaces.id, parseInt(req.params.workspaceId)),
+      with: {
+        organization: true,
+      },
+    });
+
+    if (!workspace) {
+      return res.status(404).send("Workspace not found");
+    }
+
+    // Check if user is a member of this workspace
+    const member = await db.query.workspaceMembers.findFirst({
+      where: and(
+        eq(workspaceMembers.workspaceId, workspace.id),
+        eq(workspaceMembers.userId, user.id)
+      ),
+    });
+
+    if (!member) {
+      return res.status(403).send("Not a member of this workspace");
+    }
+
+    res.json(workspace);
+  });
+
+  // Channel routes - updated to work with workspaces
+  app.get("/api/workspaces/:workspaceId/channels", async (req, res) => {
+    const user = req.user as Express.User;
+    if (!user) return res.status(401).send("Not authenticated");
+
+    const workspaceId = parseInt(req.params.workspaceId);
+
+    // Check workspace membership
+    const member = await db.query.workspaceMembers.findFirst({
+      where: and(
+        eq(workspaceMembers.workspaceId, workspaceId),
+        eq(workspaceMembers.userId, user.id)
+      ),
+    });
+
+    if (!member) {
+      return res.status(403).send("Not a member of this workspace");
+    }
+
+    const workspaceChannels = await db.query.channels.findMany({
+      where: and(
+        eq(channels.workspaceId, workspaceId),
+        eq(channels.isPrivate, false)
+      ),
       with: {
         members: true,
       },
-      where: (channels, { eq }) => eq(channels.isPrivate, false),
     });
 
-    res.json(userChannels);
+    res.json(workspaceChannels);
   });
 
-  app.post("/api/channels", async (req, res) => {
-    if (!req.user) return res.status(401).send("Not authenticated");
+  app.post("/api/workspaces/:workspaceId/channels", async (req, res) => {
+    const user = req.user as Express.User;
+    if (!user) return res.status(401).send("Not authenticated");
 
+    const workspaceId = parseInt(req.params.workspaceId);
     const { name, isPrivate } = req.body;
+
+    // Check workspace membership
+    const member = await db.query.workspaceMembers.findFirst({
+      where: and(
+        eq(workspaceMembers.workspaceId, workspaceId),
+        eq(workspaceMembers.userId, user.id)
+      ),
+    });
+
+    if (!member) {
+      return res.status(403).send("Not a member of this workspace");
+    }
+
     const [channel] = await db
       .insert(channels)
       .values({
         name,
-        isPrivate,
-        createdById: req.user.id,
+        workspaceId,
+        isPrivate: isPrivate || false,
+        createdById: user.id,
       })
       .returning();
 
-    // Add creator as a member
+    // Add creator as a channel member
     await db.insert(channelMembers).values({
       channelId: channel.id,
-      userId: req.user.id,
+      userId: user.id,
     });
 
     res.json(channel);
   });
 
-  // Message routes
+  // Message routes - keep existing implementation but add workspace membership check
   app.get("/api/channels/:channelId/messages", async (req, res) => {
-    if (!req.user) return res.status(401).send("Not authenticated");
+    const user = req.user as Express.User;
+    if (!user) return res.status(401).send("Not authenticated");
+
+    const channelId = parseInt(req.params.channelId);
+
+    // Get channel and verify workspace membership
+    const channel = await db.query.channels.findFirst({
+      where: eq(channels.id, channelId),
+      with: {
+        workspace: true,
+      },
+    });
+
+    if (!channel) {
+      return res.status(404).send("Channel not found");
+    }
+
+    const member = await db.query.workspaceMembers.findFirst({
+      where: and(
+        eq(workspaceMembers.workspaceId, channel.workspace.id),
+        eq(workspaceMembers.userId, user.id)
+      ),
+    });
+
+    if (!member) {
+      return res.status(403).send("Not a member of this workspace");
+    }
 
     const channelMessages = await db
       .select()
       .from(messages)
       .where(
         and(
-          eq(messages.channelId, parseInt(req.params.channelId)),
+          eq(messages.channelId, channelId),
           eq(messages.parentId, null) // Only get top-level messages
         )
       )
@@ -101,7 +242,8 @@ export function registerRoutes(app: Express): Server {
   });
 
   app.get("/api/messages/:messageId/thread", async (req, res) => {
-    if (!req.user) return res.status(401).send("Not authenticated");
+    const user = req.user as Express.User;
+    if (!user) return res.status(401).send("Not authenticated");
 
     const messageId = parseInt(req.params.messageId);
     const threadMessages = await db
@@ -138,7 +280,8 @@ export function registerRoutes(app: Express): Server {
   });
 
   app.post("/api/messages", async (req, res) => {
-    if (!req.user) return res.status(401).send("Not authenticated");
+    const user = req.user as Express.User;
+    if (!user) return res.status(401).send("Not authenticated");
 
     const { content, channelId, parentId } = req.body;
     const [message] = await db
@@ -147,7 +290,7 @@ export function registerRoutes(app: Express): Server {
         content,
         channelId,
         parentId: parentId || null,
-        userId: req.user.id,
+        userId: user.id,
       })
       .returning();
 
@@ -170,7 +313,8 @@ export function registerRoutes(app: Express): Server {
 
   // File upload
   app.post("/api/upload", upload.single("file"), async (req, res) => {
-    if (!req.user) return res.status(401).send("Not authenticated");
+    const user = req.user as Express.User;
+    if (!user) return res.status(401).send("Not authenticated");
     if (!req.file) return res.status(400).send("No file uploaded");
 
     const fileUrl = `/uploads/${req.file.filename}`;
@@ -179,7 +323,8 @@ export function registerRoutes(app: Express): Server {
 
   // Reactions
   app.post("/api/messages/:messageId/reactions", async (req, res) => {
-    if (!req.user) return res.status(401).send("Not authenticated");
+    const user = req.user as Express.User;
+    if (!user) return res.status(401).send("Not authenticated");
 
     const { emoji } = req.body;
     const [reaction] = await db
@@ -187,7 +332,7 @@ export function registerRoutes(app: Express): Server {
       .values({
         emoji,
         messageId: parseInt(req.params.messageId),
-        userId: req.user.id,
+        userId: user.id,
       })
       .returning();
 
@@ -203,14 +348,15 @@ export function registerRoutes(app: Express): Server {
   });
 
   app.delete("/api/messages/:messageId/reactions/:reactionId", async (req, res) => {
-    if (!req.user) return res.status(401).send("Not authenticated");
+    const user = req.user as Express.User;
+    if (!user) return res.status(401).send("Not authenticated");
 
     await db
       .delete(reactions)
       .where(
         and(
           eq(reactions.id, parseInt(req.params.reactionId)),
-          eq(reactions.userId, req.user.id)
+          eq(reactions.userId, user.id)
         )
       );
 

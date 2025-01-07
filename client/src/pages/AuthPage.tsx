@@ -5,11 +5,19 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Label } from "@/components/ui/label";
+import { useLocation } from "wouter";
 
 export default function AuthPage() {
   const { login, register } = useUser();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
+  const [location] = useLocation();
+
+  // Get workspace from URL if available
+  const workspaceId = location.startsWith('/workspace/') 
+    ? parseInt(location.split('/')[2]) 
+    : undefined;
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>, isLogin: boolean) => {
     event.preventDefault();
@@ -18,11 +26,13 @@ export default function AuthPage() {
     const formData = new FormData(event.currentTarget);
     const username = formData.get("username") as string;
     const password = formData.get("password") as string;
+    const organization = formData.get("organization") as string;
+    const workspace = formData.get("workspace") as string;
 
     try {
       const result = isLogin 
-        ? await login({ username, password })
-        : await register({ username, password });
+        ? await login({ username, password, workspaceId })
+        : await register({ username, password, organization, workspace });
 
       if (!result.ok) {
         toast({
@@ -46,7 +56,9 @@ export default function AuthPage() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl font-bold">Welcome to ChatGenius</CardTitle>
+          <CardTitle className="text-2xl font-bold">
+            {workspaceId ? "Workspace Login" : "Welcome to ChatGenius"}
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="login">
@@ -54,7 +66,7 @@ export default function AuthPage() {
               <TabsTrigger value="login">Login</TabsTrigger>
               <TabsTrigger value="register">Register</TabsTrigger>
             </TabsList>
-            
+
             <TabsContent value="login">
               <form onSubmit={(e) => handleSubmit(e, true)} className="space-y-4">
                 <div className="space-y-2">
@@ -94,6 +106,22 @@ export default function AuthPage() {
                     placeholder="Choose a password"
                     required
                   />
+                  {!workspaceId && (
+                    <>
+                      <Label htmlFor="organization">Organization (Optional)</Label>
+                      <Input
+                        id="organization"
+                        name="organization"
+                        placeholder="Organization name"
+                      />
+                      <Label htmlFor="workspace">Workspace (Optional)</Label>
+                      <Input
+                        id="workspace"
+                        name="workspace"
+                        placeholder="Workspace name"
+                      />
+                    </>
+                  )}
                 </div>
                 <Button
                   type="submit"

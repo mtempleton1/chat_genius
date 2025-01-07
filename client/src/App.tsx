@@ -7,7 +7,17 @@ import { useUser } from "./hooks/use-user";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "./lib/queryClient";
 
-function App() {
+// App component wraps everything in QueryClientProvider
+export default function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <AppRoutes />
+    </QueryClientProvider>
+  );
+}
+
+// Separate component for routes to use React Query hooks
+function AppRoutes() {
   const { user, isLoading } = useUser();
 
   if (isLoading) {
@@ -18,20 +28,27 @@ function App() {
     );
   }
 
+  // Not logged in - show auth page with optional workspace context
   if (!user) {
-    return <AuthPage />;
+    return (
+      <Switch>
+        <Route path="/workspace/:id" component={AuthPage} />
+        <Route path="/" component={AuthPage} />
+      </Switch>
+    );
   }
 
+  // Logged in - handle workspace and general routes
   return (
-    <QueryClientProvider client={queryClient}>
-      <Switch>
-        <Route path="/" component={ChatPage} />
-        <Route component={NotFound} />
-      </Switch>
-    </QueryClientProvider>
+    <Switch>
+      <Route path="/workspace/:workspaceId" component={ChatPage} />
+      <Route path="/" component={ChatPage} />
+      <Route component={NotFound} />
+    </Switch>
   );
 }
 
+// fallback 404 not found page
 function NotFound() {
   return (
     <div className="min-h-screen w-full flex items-center justify-center bg-gray-50">
@@ -49,5 +66,3 @@ function NotFound() {
     </div>
   );
 }
-
-export default App;

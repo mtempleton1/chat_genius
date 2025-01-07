@@ -1,17 +1,45 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { InsertUser, SelectUser } from "@db/schema";
+import type { z } from 'zod';
+
+// Define our own types since we can't import from schema
+type User = {
+  id: number;
+  username: string;
+  status?: string;
+  avatar?: string;
+  workspaceId?: number;
+  lastSeen?: Date;
+};
 
 type RequestResult = {
   ok: true;
+  user?: {
+    id: number;
+    username: string;
+    workspaceId?: number;
+  };
 } | {
   ok: false;
   message: string;
 };
 
+type LoginData = {
+  username: string;
+  password: string;
+  workspaceId?: number;
+};
+
+type RegisterData = {
+  username: string;
+  password: string;
+  organization?: string;
+  workspace?: string;
+};
+
 async function handleRequest(
   url: string,
   method: string,
-  body?: InsertUser
+  body?: LoginData | RegisterData
 ): Promise<RequestResult> {
   try {
     const response = await fetch(url, {
@@ -29,13 +57,14 @@ async function handleRequest(
       return { ok: false, message };
     }
 
-    return { ok: true };
+    const data = await response.json();
+    return { ok: true, user: data.user };
   } catch (e: any) {
     return { ok: false, message: e.toString() };
   }
 }
 
-async function fetchUser(): Promise<SelectUser | null> {
+async function fetchUser(): Promise<User | null> {
   const response = await fetch('/api/user', {
     credentials: 'include'
   });
@@ -53,14 +82,14 @@ async function fetchUser(): Promise<SelectUser | null> {
 export function useUser() {
   const queryClient = useQueryClient();
 
-  const { data: user, error, isLoading } = useQuery<SelectUser | null, Error>({
+  const { data: user, error, isLoading } = useQuery<User | null, Error>({
     queryKey: ['user'],
     queryFn: fetchUser,
     staleTime: Infinity,
     retry: false
   });
 
-  const loginMutation = useMutation<RequestResult, Error, InsertUser>({
+  const loginMutation = useMutation<RequestResult, Error, LoginData>({
     mutationFn: (userData) => handleRequest('/api/login', 'POST', userData),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['user'] });
@@ -74,7 +103,7 @@ export function useUser() {
     },
   });
 
-  const registerMutation = useMutation<RequestResult, Error, InsertUser>({
+  const registerMutation = useMutation<RequestResult, Error, RegisterData>({
     mutationFn: (userData) => handleRequest('/api/register', 'POST', userData),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['user'] });

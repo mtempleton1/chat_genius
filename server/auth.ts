@@ -5,9 +5,10 @@ import session from "express-session";
 import createMemoryStore from "memorystore";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
-import { users, insertUserSchema, type User as SelectUser } from "@db/schema";
+import { users, workspaceMembers, workspaces, organizations } from "@db/schema";
 import { db } from "@db";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
+import { z } from "zod";
 
 const scryptAsync = promisify(scrypt);
 const crypto = {
@@ -28,16 +29,44 @@ const crypto = {
   },
 };
 
+// Extended user schema to include organization/workspace fields
+const extendedUserSchema = z.object({
+  username: z.string(),
+  password: z.string(),
+  organization: z.string().optional(),
+  workspace: z.string().optional(),
+  workspaceId: z.number().optional(),
+});
+
+// Base user type from database
+type BaseUser = {
+  id: number;
+  username: string;
+  password: string;
+  avatar?: string | null;
+  status?: string | null;
+  lastSeen?: Date | null;
+  createdAt?: Date | null;
+};
+
+// Extended user type with workspace info
+type User = BaseUser & {
+  workspaceId?: number;
+};
+
 declare global {
   namespace Express {
-    interface User extends SelectUser {}
+    // eslint-disable-next-line @typescript-eslint/no-empty-interface
+    interface User extends BaseUser {
+      workspaceId?: number;
+    }
   }
 }
 
 export function setupAuth(app: Express) {
   const MemoryStore = createMemoryStore(session);
   const sessionSettings: session.SessionOptions = {
-    secret: process.env.REPL_ID || "chatgenius-secret", // Use REPL_ID for secure secret
+    secret: process.env.REPL_ID || "chatgenius-secret",
     resave: false,
     saveUninitialized: false,
     cookie: {
@@ -70,12 +99,12 @@ export function setupAuth(app: Express) {
         if (!user) {
           return done(null, false, { message: "Invalid username" });
         }
-        
+
         const isMatch = await crypto.compare(password, user.password);
         if (!isMatch) {
           return done(null, false, { message: "Invalid password" });
         }
-        
+
         return done(null, user);
       } catch (err) {
         return done(err);
@@ -83,17 +112,21 @@ export function setupAuth(app: Express) {
     })
   );
 
-  passport.serializeUser((user, done) => {
-    done(null, user.id);
+  passport.serializeUser((user: Express.User, done) => {
+    done(null, { id: user.id, workspaceId: user.workspaceId });
   });
 
-  passport.deserializeUser(async (id: number, done) => {
+  passport.deserializeUser(async (data: { id: number; workspaceId?: number }, done) => {
     try {
       const [user] = await db
         .select()
         .from(users)
-        .where(eq(users.id, id))
+        .where(eq(users.id, data.id))
         .limit(1);
+
+      if (user) {
+        (user as User).workspaceId = data.workspaceId;
+      }
       done(null, user);
     } catch (err) {
       done(err);
@@ -102,14 +135,14 @@ export function setupAuth(app: Express) {
 
   app.post("/api/register", async (req, res, next) => {
     try {
-      const result = insertUserSchema.safeParse(req.body);
+      const result = extendedUserSchema.safeParse(req.body);
       if (!result.success) {
         return res
           .status(400)
           .send("Invalid input: " + result.error.issues.map(i => i.message).join(", "));
       }
 
-      const { username, password } = result.data;
+      const { username, password, organization, workspace, workspaceId } = result.data;
       const [existingUser] = await db
         .select()
         .from(users)
@@ -130,11 +163,42 @@ export function setupAuth(app: Express) {
         })
         .returning();
 
-      req.login(newUser, (err) => {
+      // If organization and workspace are provided, create them
+      let newWorkspaceId: number | undefined;
+      if (organization && workspace) {
+        const [org] = await db
+          .insert(organizations)
+          .values({ name: organization })
+          .returning();
+
+        const [ws] = await db
+          .insert(workspaces)
+          .values({ name: workspace, organizationId: org.id })
+          .returning();
+
+        await db
+          .insert(workspaceMembers)
+          .values({
+            userId: newUser.id,
+            workspaceId: ws.id,
+            role: "owner",
+          });
+
+        newWorkspaceId = ws.id;
+      }
+
+      // Add workspaceId to the user object for session
+      const userWithWorkspace = { ...newUser, workspaceId: newWorkspaceId };
+
+      req.login(userWithWorkspace, (err) => {
         if (err) return next(err);
         return res.json({
           message: "Registration successful",
-          user: { id: newUser.id, username: newUser.username },
+          user: { 
+            id: newUser.id, 
+            username: newUser.username,
+            workspaceId: newWorkspaceId
+          },
         });
       });
     } catch (error) {
@@ -142,23 +206,45 @@ export function setupAuth(app: Express) {
     }
   });
 
-  app.post("/api/login", (req, res, next) => {
-    const result = insertUserSchema.safeParse(req.body);
+  app.post("/api/login", async (req, res, next) => {
+    const result = extendedUserSchema.safeParse(req.body);
     if (!result.success) {
       return res
         .status(400)
         .send("Invalid input: " + result.error.issues.map(i => i.message).join(", "));
     }
 
-    passport.authenticate("local", (err: any, user: Express.User, info: IVerifyOptions) => {
+    const { username, password, workspaceId } = result.data;
+
+    passport.authenticate("local", async (err: any, user: Express.User, info: IVerifyOptions) => {
       if (err) return next(err);
       if (!user) return res.status(400).send(info.message ?? "Login failed");
+
+      // If workspaceId is provided, verify membership
+      if (workspaceId) {
+        const member = await db.query.workspaceMembers.findFirst({
+          where: and(
+            eq(workspaceMembers.userId, user.id),
+            eq(workspaceMembers.workspaceId, workspaceId)
+          ),
+        });
+
+        if (!member) {
+          return res.status(403).send("Not a member of this workspace");
+        }
+
+        user.workspaceId = workspaceId;
+      }
 
       req.logIn(user, (err) => {
         if (err) return next(err);
         return res.json({
           message: "Login successful",
-          user: { id: user.id, username: user.username },
+          user: { 
+            id: user.id, 
+            username: user.username,
+            workspaceId: user.workspaceId 
+          },
         });
       });
     })(req, res, next);
