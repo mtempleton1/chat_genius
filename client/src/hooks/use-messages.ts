@@ -3,10 +3,7 @@ import type { Message } from "@db/schema";
 
 export function useMessages(channelId: number | null) {
   const queryClient = useQueryClient();
-  const isThread = typeof channelId === "number" && channelId > 0;
-  const queryKey = isThread 
-    ? [`/api/messages/${channelId}/thread`]
-    : [`/api/channels/${channelId}/messages`];
+  const queryKey = [`/api/channels/${channelId}/messages`];
 
   const { data: messages, isLoading } = useQuery<Message[]>({
     queryKey,
