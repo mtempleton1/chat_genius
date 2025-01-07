@@ -1,9 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Message } from "@db/schema";
 
-export function useMessages(channelId: number | null) {
+export function useMessages(messageIdOrChannelId: number | null, isThread: boolean = false) {
   const queryClient = useQueryClient();
-  const queryKey = [`/api/channels/${channelId}/messages`];
+  const queryKey = isThread 
+    ? [`/api/messages/${messageIdOrChannelId}/thread`]
+    : [`/api/channels/${messageIdOrChannelId}/messages`];
 
   const { data: messages, isLoading } = useQuery<Message[]>({
     queryKey,

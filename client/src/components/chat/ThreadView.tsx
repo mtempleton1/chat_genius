@@ -13,7 +13,7 @@ type ThreadViewProps = {
 };
 
 export default function ThreadView({ messageId, onClose }: ThreadViewProps) {
-  const { messages, isLoading, sendMessage } = useMessages(messageId);
+  const { messages, isLoading, sendMessage } = useMessages(messageId, true);
 
   if (isLoading) {
     return (
