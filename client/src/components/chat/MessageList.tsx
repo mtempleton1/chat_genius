@@ -37,16 +37,15 @@ export default function MessageList({
   useEffect(() => {
     if (!channelId) return;
 
-    return addMessageHandler((msg) => {
+    const handler = (msg: any) => {
       if (
         (msg.type === "message" || msg.type === "thread_message") &&
         msg.channelId === channelId &&
         !msg.parentId
       ) {
-        // Only show non-thread messages in main channel
         queryClient.setQueryData<Message[]>(
           [`/api/channels/${channelId}/messages`],
-          (oldMessages) => {
+          (oldMessages = []) => {
             const messageId = msg.id || msg.messageId;
             if (!messageId) return oldMessages;
 
@@ -63,24 +62,24 @@ export default function MessageList({
               reactions: [],
             };
 
-            if (!oldMessages) return [newMessage];
-
-            // Ensure we don't add duplicate messages
             const messageExists = oldMessages.some(m => m.id === messageId);
             if (messageExists) {
-              // Update existing message if needed
-              return oldMessages.map(m => 
-                m.id === messageId ? { ...m, ...newMessage } : m
-              );
+              return oldMessages.map(m => m.id === messageId ? { ...m, ...newMessage } : m);
             }
             
-            // Add new message
-            return [...oldMessages, newMessage];
-          },
+            return [...oldMessages, newMessage].sort((a, b) => 
+              new Date(a.createdAt!).getTime() - new Date(b.createdAt!).getTime()
+            );
+          }
         );
       }
-    });
-  }, [addMessageHandler, channelId, queryClient]);
+    };
+
+    const cleanup = addMessageHandler(handler);
+    return () => {
+      cleanup();
+    };
+  }, [channelId, queryClient, addMessageHandler]);
 
   const handleSendMessage = async (content: string) => {
     if (!channelId) return;
