@@ -15,9 +15,15 @@ type MessageListProps = {
   onThreadSelect: (messageId: number) => void;
 };
 
-export default function MessageList({ channelId, onThreadSelect }: MessageListProps) {
-  const { messages, isLoading, sendMessage, addReaction } = useMessages(channelId ?? 0);
-  const { addMessageHandler, sendMessage: sendWebSocketMessage } = useWebSocket();
+export default function MessageList({
+  channelId,
+  onThreadSelect,
+}: MessageListProps) {
+  const { messages, isLoading, sendMessage, addReaction } = useMessages(
+    channelId ?? 0,
+  );
+  const { addMessageHandler, sendMessage: sendWebSocketMessage } =
+    useWebSocket();
   const scrollRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
 
@@ -32,27 +38,34 @@ export default function MessageList({ channelId, onThreadSelect }: MessageListPr
     if (!channelId) return;
 
     return addMessageHandler((msg) => {
-      if ((msg.type === "message" || msg.type === "thread_message") && 
-          msg.channelId === channelId && 
-          !msg.parentId) {  // Only show non-thread messages in main channel
+      if (
+        (msg.type === "message" || msg.type === "thread_message") &&
+        msg.channelId === channelId &&
+        !msg.parentId
+      ) {
+        // Only show non-thread messages in main channel
         queryClient.setQueryData<Message[]>(
           [`/api/channels/${channelId}/messages`],
           (oldMessages) => {
-            if (!oldMessages) return [msg];
-            // Avoid duplicate messages
-            if (oldMessages.some(m => m.id === (msg.id || msg.messageId))) {
-              return oldMessages;
-            }
-            return [...oldMessages, {
+            const newMessage = {
               id: msg.id || msg.messageId,
               content: msg.content,
               userId: msg.userId,
               channelId: msg.channelId,
-              createdAt: new Date().toISOString(),
+              createdAt: new Date(msg.createdAt || msg.updatedAt || new Date()),
+              parentId: msg.parentId,
+              attachments: msg.attachments || [],
+              updatedAt: msg.updatedAt,
               user: msg.user,
-              reactions: []
-            }];
-          }
+              reactions: [],
+            };
+            if (!oldMessages) return [newMessage];
+            // Avoid duplicate messages
+            if (oldMessages.some((m) => m.id === (msg.id || msg.messageId))) {
+              return oldMessages;
+            }
+            return [...oldMessages, newMessage];
+          },
         );
       }
     });
@@ -99,7 +112,9 @@ export default function MessageList({ channelId, onThreadSelect }: MessageListPr
                 key={message.id}
                 message={message}
                 onThreadSelect={onThreadSelect}
-                onReactionAdd={(emoji) => addReaction({ messageId: message.id, emoji })}
+                onReactionAdd={(emoji) =>
+                  addReaction({ messageId: message.id, emoji })
+                }
               />
             ))}
           </div>
@@ -128,14 +143,23 @@ type MessageItemProps = {
   onReactionAdd: (emoji: string) => void;
 };
 
-function MessageItem({ message, onThreadSelect, onReactionAdd }: MessageItemProps) {
+function MessageItem({
+  message,
+  onThreadSelect,
+  onReactionAdd,
+}: MessageItemProps) {
   if (!message.user) return null;
 
   return (
     <div className="flex gap-3 group">
       <Avatar>
-        <AvatarImage src={message.user.avatar || undefined} alt={message.user.username} />
-        <AvatarFallback>{message.user.username[0].toUpperCase()}</AvatarFallback>
+        <AvatarImage
+          src={message.user.avatar || undefined}
+          alt={message.user.username}
+        />
+        <AvatarFallback>
+          {message.user.username[0].toUpperCase()}
+        </AvatarFallback>
       </Avatar>
 
       <div className="flex-1">
