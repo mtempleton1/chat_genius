@@ -154,35 +154,43 @@ export function registerRoutes(app: Express): Server {
   });
 
   app.get("/api/workspaces/:workspaceId/channels", async (req, res) => {
-    console.log("BALAHABALAHAAHHFHFKLDFDHLDFLH");
-    const user = req.user as Express.User;
-    if (!user) return res.status(401).send("Not authenticated");
+    try {
+      const user = req.user as Express.User;
+      if (!user) return res.status(401).send("Not authenticated");
 
-    const workspaceId = parseInt(req.params.workspaceId);
-    if (isNaN(workspaceId)) {
-      return res.status(400).send("Invalid workspace ID");
+      const workspaceId = parseInt(req.params.workspaceId);
+      if (isNaN(workspaceId)) {
+        return res.status(400).send("Invalid workspace ID");
+      }
+
+      // Check workspace membership
+      const member = await db.query.workspaceMembers.findFirst({
+        where: and(
+          eq(workspaceMembers.workspaceId, workspaceId),
+          eq(workspaceMembers.userId, user.id),
+        ),
+      });
+
+      if (!member) {
+        return res.status(403).send("Not a member of this workspace");
+      }
+
+      const workspaceChannels = await db.query.channels.findMany({
+        where: eq(channels.workspaceId, workspaceId),
+        with: {
+          members: true,
+        },
+      });
+
+      if (!workspaceChannels) {
+        return res.status(404).send("No channels found");
+      }
+
+      res.json(workspaceChannels);
+    } catch (error) {
+      console.error("Error fetching workspace channels:", error);
+      res.status(500).send("Internal server error");
     }
-
-    // Check workspace membership
-    const member = await db.query.workspaceMembers.findFirst({
-      where: and(
-        eq(workspaceMembers.workspaceId, workspaceId),
-        eq(workspaceMembers.userId, user.id),
-      ),
-    });
-
-    if (!member) {
-      return res.status(403).send("Not a member of this workspace");
-    }
-
-    const workspaceChannels = await db.query.channels.findMany({
-      where: eq(channels.workspaceId, workspaceId),
-      with: {
-        members: true,
-      },
-    });
-
-    res.json(workspaceChannels);
   });
 
   app.post("/api/workspaces/:workspaceId/channels", async (req, res) => {
