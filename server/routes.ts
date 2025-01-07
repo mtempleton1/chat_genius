@@ -228,7 +228,7 @@ export function registerRoutes(app: Express): Server {
   });
 
   app.get("/api/channels/:channelId/messages", async (req, res) => {
-    console.log("ARE WE GETTTTING HERERERERERERERE???????");
+    console.log("ARE WE GETTTING HERERERERERERERE???????");
 
     const user = req.user as Express.User;
     if (!user) return res.status(401).send("Not authenticated");
@@ -604,6 +604,49 @@ export function registerRoutes(app: Express): Server {
       }
     },
   );
+  // Add endpoint to update user's current workspace
+  app.post("/api/user/workspace", async (req, res) => {
+    const user = req.user as Express.User;
+    if (!user) return res.status(401).send("Not authenticated");
+
+    const workspaceId = req.body.workspaceId;
+    if (!workspaceId) {
+      return res.status(400).send("Workspace ID is required");
+    }
+
+    try {
+      // Verify workspace membership
+      const [member] = await db
+        .select()
+        .from(workspaceMembers)
+        .where(
+          and(
+            eq(workspaceMembers.userId, user.id),
+            eq(workspaceMembers.workspaceId, workspaceId)
+          )
+        )
+        .limit(1);
+
+      if (!member) {
+        return res.status(403).send("Not a member of this workspace");
+      }
+
+      // Update the session with new workspace ID
+      req.user.workspaceId = workspaceId;
+
+      return res.json({
+        message: "Workspace updated successfully",
+        user: {
+          id: user.id,
+          username: user.username,
+          workspaceId
+        }
+      });
+    } catch (error) {
+      console.error("Error updating workspace:", error);
+      res.status(500).send("Internal server error");
+    }
+  });
 
   return httpServer;
 }

@@ -34,14 +34,10 @@ export default function WorkspaceSelector({ onSelect }: WorkspaceSelectorProps) 
   // Add mutation for setting workspace
   const setWorkspace = useMutation({
     mutationFn: async (workspaceId: number) => {
-      const response = await fetch('/api/login', {
+      const response = await fetch('/api/user/workspace', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          username: (queryClient.getQueryData(['user']) as any)?.username,
-          password: '',  // Not needed for workspace update
-          workspaceId
-        }),
+        body: JSON.stringify({ workspaceId }),
         credentials: 'include',
       });
 
