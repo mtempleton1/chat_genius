@@ -9,7 +9,7 @@ export function useMessages(messageIdOrChannelId: number | null, isThread: boole
 
   const { data: messages, isLoading } = useQuery<Message[]>({
     queryKey,
-    enabled: channelId !== null && channelId > 0,
+    enabled: messageIdOrChannelId !== null && messageIdOrChannelId > 0,
   });
 
   const sendMessage = useMutation({
@@ -19,7 +19,7 @@ export function useMessages(messageIdOrChannelId: number | null, isThread: boole
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           content, 
-          channelId: parentId ? messages?.[0].channelId : channelId,
+          channelId: parentId ? messages?.[0].channelId : messageIdOrChannelId,
           parentId
         }),
         credentials: "include",
