@@ -31,12 +31,14 @@ export default function MessageInput({ onSendMessage, fileUploadComponent }: Mes
 
   return (
     <div className="flex flex-col gap-2">
+      {/* Formatting Toolbar */}
       {showToolbar && (
         <div className="flex items-center gap-1 p-2 bg-secondary/20 rounded-md">
           <ToggleGroup 
             type="multiple" 
             value={format} 
             onValueChange={setFormat}
+            className="flex items-center gap-1"
           >
             <ToggleGroupItem value="bold" aria-label="Toggle bold">
               <Bold className="h-4 w-4" />
@@ -48,6 +50,7 @@ export default function MessageInput({ onSendMessage, fileUploadComponent }: Mes
         </div>
       )}
 
+      {/* Message Input Form */}
       <form onSubmit={handleSubmit} className="flex gap-2">
         <div className="flex-1">
           <Textarea
@@ -62,21 +65,31 @@ export default function MessageInput({ onSendMessage, fileUploadComponent }: Mes
 
         {fileUploadComponent}
 
-        <div className="flex flex-col gap-1">
-          <Button 
-            type="button" 
-            size="icon" 
-            variant="ghost"
-            onClick={() => setShowToolbar(prev => !prev)}
-            className="h-6 w-6"
-          >
-            {showToolbar ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-          </Button>
-          <Button type="submit" size="icon" disabled={!content.trim()}>
-            <Send className="h-4 w-4" />
-          </Button>
-        </div>
+        <Button type="submit" size="icon" disabled={!content.trim()}>
+          <Send className="h-4 w-4" />
+        </Button>
       </form>
+
+      {/* Toggle Toolbar Button */}
+      <Button 
+        type="button" 
+        size="sm"
+        variant="ghost"
+        onClick={() => setShowToolbar(prev => !prev)}
+        className="h-6 px-2 text-xs self-start"
+      >
+        {showToolbar ? (
+          <> 
+            <ChevronUp className="h-3 w-3 mr-1" />
+            Hide formatting
+          </>
+        ) : (
+          <>
+            <ChevronDown className="h-3 w-3 mr-1" />
+            Show formatting
+          </>
+        )}
+      </Button>
     </div>
   );
 }
