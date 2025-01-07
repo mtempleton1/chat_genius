@@ -216,6 +216,24 @@ export function setupAuth(app: Express) {
             role: "member",
           });
 
+        // Add user to all default channels in the workspace
+        const defaultChannels = await db
+          .select()
+          .from(channels)
+          .where(and(
+            eq(channels.workspaceId, validatedData.workspaceId),
+            eq(channels.joinByDefault, true)
+          ));
+
+        if (defaultChannels.length > 0) {
+          await db.insert(channelMembers).values(
+            defaultChannels.map(channel => ({
+              userId: newUser.id,
+              channelId: channel.id,
+            }))
+          );
+        }
+
         newWorkspaceId = validatedData.workspaceId;
       } else if (isNewWorkspaceRegistration(validatedData)) {
         // New workspace registration

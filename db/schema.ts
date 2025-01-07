@@ -61,6 +61,7 @@ export const channels = pgTable("channels", {
     .references(() => workspaces.id)
     .notNull(),
   isPrivate: boolean("is_private").default(false),
+  joinByDefault: boolean("join_by_default").default(true),
   createdAt: timestamp("created_at").defaultNow(),
   createdById: integer("created_by_id")
     .references(() => users.id)

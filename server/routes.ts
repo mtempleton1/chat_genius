@@ -214,15 +214,26 @@ export function registerRoutes(app: Express): Server {
         name,
         workspaceId,
         isPrivate: isPrivate || false,
+        joinByDefault: true,
         createdById: user.id,
       })
       .returning();
 
-    // Add creator as a channel member
-    await db.insert(channelMembers).values({
-      channelId: channel.id,
-      userId: user.id,
-    });
+    // Get all workspace members
+    const workspaceMembers = await db
+      .select()
+      .from(workspaceMembers)
+      .where(eq(workspaceMembers.workspaceId, workspaceId));
+
+    // Add all workspace members to the channel
+    if (workspaceMembers.length > 0) {
+      await db.insert(channelMembers).values(
+        workspaceMembers.map(member => ({
+          channelId: channel.id,
+          userId: member.userId,
+        }))
+      );
+    }
 
     res.json(channel);
   });
