@@ -1,7 +1,7 @@
 import { Server as HttpServer } from "http";
 import { WebSocket, WebSocketServer } from "ws";
 import { db } from "@db";
-import { users, channelMembers } from "@db/schema";
+import { users, channelMembers, messages } from "@db/schema";
 import { eq } from "drizzle-orm";
 
 interface Client extends WebSocket {
