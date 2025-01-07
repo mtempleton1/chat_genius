@@ -3,8 +3,8 @@ import { createServer, type Server } from "http";
 import { setupAuth } from "./auth";
 import { setupWebSocket } from "./websocket";
 import { db } from "@db";
-import { channels, messages, reactions, channelMembers, organizations, workspaces, workspaceMembers } from "@db/schema";
-import { eq, and, asc, or, desc } from "drizzle-orm";
+import { channels, messages, reactions, channelMembers, organizations, workspaces, workspaceMembers, users } from "@db/schema";
+import { eq, and, asc, or, desc, isNull } from "drizzle-orm";
 import multer from "multer";
 import type { InferModel } from 'drizzle-orm';
 
@@ -12,6 +12,7 @@ import type { InferModel } from 'drizzle-orm';
 type Workspace = InferModel<typeof workspaces>;
 type Organization = InferModel<typeof organizations>;
 type Channel = InferModel<typeof channels>;
+type Message = InferModel<typeof messages>;
 
 type WorkspaceWithOrg = Workspace & {
   organization: Organization | null;
@@ -40,7 +41,6 @@ export function registerRoutes(app: Express): Server {
   const httpServer = createServer(app);
   setupWebSocket(httpServer);
 
-  // Organization and Workspace routes
   app.get("/api/workspaces/:workspaceId", async (req, res) => {
     const workspaceId = parseInt(req.params.workspaceId);
     if (isNaN(workspaceId)) {
@@ -48,12 +48,18 @@ export function registerRoutes(app: Express): Server {
     }
 
     try {
-      const workspaceResult = await db.query.workspaces.findFirst({
-        where: eq(workspaces.id, workspaceId),
-        with: {
-          organization: true,
-        },
-      }) as WorkspaceWithOrg | null;
+      const [workspaceResult] = await db
+        .select({
+          id: workspaces.id,
+          name: workspaces.name,
+          organizationId: workspaces.organizationId,
+          createdAt: workspaces.createdAt,
+          organization: organizations,
+        })
+        .from(workspaces)
+        .leftJoin(organizations, eq(workspaces.organizationId, organizations.id))
+        .where(eq(workspaces.id, workspaceId))
+        .limit(1);
 
       if (!workspaceResult) {
         return res.status(404).send("Workspace not found");
@@ -62,18 +68,20 @@ export function registerRoutes(app: Express): Server {
       // If user is authenticated, check membership
       if (req.user) {
         const user = req.user as Express.User;
-        const memberResult = await db.query.workspaceMembers.findFirst({
-          where: and(
+        const [member] = await db
+          .select()
+          .from(workspaceMembers)
+          .where(and(
             eq(workspaceMembers.workspaceId, workspaceId),
             eq(workspaceMembers.userId, user.id)
-          ),
-        });
+          ))
+          .limit(1);
 
-        if (memberResult) {
+        if (member) {
           // Return full workspace data for members
           return res.json({
             ...workspaceResult,
-            membership: memberResult,
+            membership: member,
           });
         }
       }
@@ -90,7 +98,7 @@ export function registerRoutes(app: Express): Server {
               name: workspaceResult.organization.name,
               domain: workspaceResult.organization.domain,
             }
-          : undefined,
+          : null,
       };
 
       return res.json(publicWorkspaceData);
@@ -100,7 +108,6 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Channel routes - updated with proper typing and error handling
   app.get("/api/channels/:channelId/messages", async (req, res) => {
     const user = req.user as Express.User;
     if (!user) return res.status(401).send("Not authenticated");
@@ -110,52 +117,78 @@ export function registerRoutes(app: Express): Server {
       return res.status(400).send("Invalid channel ID");
     }
 
-    // Get channel and verify workspace membership
-    const channel = await db.query.channels.findFirst({
-      where: eq(channels.id, channelId),
-      with: {
-        workspace: {
-          with: {
-            organization: true
-          }
-        }
-      },
-    }) as ChannelWithWorkspace | null;
+    try {
+      // Get channel and verify workspace membership
+      const [channel] = await db
+        .select({
+          id: channels.id,
+          name: channels.name,
+          workspaceId: channels.workspaceId,
+          workspace: workspaces,
+        })
+        .from(channels)
+        .leftJoin(workspaces, eq(channels.workspaceId, workspaces.id))
+        .where(eq(channels.id, channelId))
+        .limit(1);
 
-    if (!channel || !channel.workspace) {
-      return res.status(404).send("Channel not found");
+      if (!channel || !channel.workspace) {
+        return res.status(404).send("Channel not found");
+      }
+
+      // Verify workspace membership
+      const [workspaceMember] = await db
+        .select()
+        .from(workspaceMembers)
+        .where(and(
+          eq(workspaceMembers.workspaceId, channel.workspaceId),
+          eq(workspaceMembers.userId, user.id)
+        ))
+        .limit(1);
+
+      if (!workspaceMember) {
+        return res.status(403).send("Not a member of this workspace");
+      }
+
+      const channelMessages = await db
+        .select()
+        .from(messages)
+        .where(and(
+          eq(messages.channelId, channelId),
+          isNull(messages.parentId)
+        ))
+        .orderBy(desc(messages.createdAt))
+        .limit(50);
+
+      const messagesWithDetails = await Promise.all(
+        channelMessages.map(async (message) => {
+          const messageReactions = await db
+            .select({
+              reaction: reactions,
+              user: users,
+            })
+            .from(reactions)
+            .leftJoin(users, eq(reactions.userId, users.id))
+            .where(eq(reactions.messageId, message.id));
+
+          const [messageUser] = await db
+            .select()
+            .from(users)
+            .where(eq(users.id, message.userId!))
+            .limit(1);
+
+          return {
+            ...message,
+            reactions: messageReactions,
+            user: messageUser,
+          };
+        })
+      );
+
+      res.json(messagesWithDetails);
+    } catch (error) {
+      console.error("Error fetching messages:", error);
+      res.status(500).send("Internal server error");
     }
-
-    // Verify workspace membership
-    const workspaceMember = await db.query.workspaceMembers.findFirst({
-      where: and(
-        eq(workspaceMembers.workspaceId, channel.workspace.id),
-        eq(workspaceMembers.userId, user.id)
-      ),
-    });
-
-    if (!workspaceMember) {
-      return res.status(403).send("Not a member of this workspace");
-    }
-
-    const channelMessages = await db.query.messages.findMany({
-      where: and(
-        eq(messages.channelId, channelId),
-        eq(messages.parentId, null)
-      ),
-      orderBy: [desc(messages.createdAt)],
-      limit: 50,
-      with: {
-        user: true,
-        reactions: {
-          with: {
-            user: true,
-          },
-        },
-      },
-    });
-
-    res.json(channelMessages);
   });
 
   app.post("/api/organizations", async (req, res) => {
