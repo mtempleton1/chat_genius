@@ -81,8 +81,13 @@ export function registerRoutes(app: Express): Server {
     const user = req.user as Express.User;
     if (!user) return res.status(401).send("Not authenticated");
 
+    const workspaceId = parseInt(req.params.workspaceId);
+    if (isNaN(workspaceId)) {
+      return res.status(400).send("Invalid workspace ID");
+    }
+
     const workspace = await db.query.workspaces.findFirst({
-      where: eq(workspaces.id, parseInt(req.params.workspaceId)),
+      where: eq(workspaces.id, workspaceId),
       with: {
         organization: true,
       },
@@ -95,7 +100,7 @@ export function registerRoutes(app: Express): Server {
     // Check if user is a member of this workspace
     const member = await db.query.workspaceMembers.findFirst({
       where: and(
-        eq(workspaceMembers.workspaceId, workspace.id),
+        eq(workspaceMembers.workspaceId, workspaceId),
         eq(workspaceMembers.userId, user.id)
       ),
     });
@@ -113,6 +118,9 @@ export function registerRoutes(app: Express): Server {
     if (!user) return res.status(401).send("Not authenticated");
 
     const workspaceId = parseInt(req.params.workspaceId);
+    if (isNaN(workspaceId)) {
+      return res.status(400).send("Invalid workspace ID");
+    }
 
     // Check workspace membership
     const member = await db.query.workspaceMembers.findFirst({
@@ -127,10 +135,7 @@ export function registerRoutes(app: Express): Server {
     }
 
     const workspaceChannels = await db.query.channels.findMany({
-      where: and(
-        eq(channels.workspaceId, workspaceId),
-        eq(channels.isPrivate, false)
-      ),
+      where: eq(channels.workspaceId, workspaceId),
       with: {
         members: true,
       },
@@ -144,6 +149,10 @@ export function registerRoutes(app: Express): Server {
     if (!user) return res.status(401).send("Not authenticated");
 
     const workspaceId = parseInt(req.params.workspaceId);
+    if (isNaN(workspaceId)) {
+      return res.status(400).send("Invalid workspace ID");
+    }
+
     const { name, isPrivate } = req.body;
 
     // Check workspace membership
@@ -177,12 +186,15 @@ export function registerRoutes(app: Express): Server {
     res.json(channel);
   });
 
-  // Message routes - keep existing implementation but add workspace membership check
+  // Message routes - updated with proper typing and error handling
   app.get("/api/channels/:channelId/messages", async (req, res) => {
     const user = req.user as Express.User;
     if (!user) return res.status(401).send("Not authenticated");
 
     const channelId = parseInt(req.params.channelId);
+    if (isNaN(channelId)) {
+      return res.status(400).send("Invalid channel ID");
+    }
 
     // Get channel and verify workspace membership
     const channel = await db.query.channels.findFirst({
@@ -192,10 +204,11 @@ export function registerRoutes(app: Express): Server {
       },
     });
 
-    if (!channel) {
+    if (!channel || !channel.workspace) {
       return res.status(404).send("Channel not found");
     }
 
+    // Verify workspace membership
     const member = await db.query.workspaceMembers.findFirst({
       where: and(
         eq(workspaceMembers.workspaceId, channel.workspace.id),
@@ -207,38 +220,24 @@ export function registerRoutes(app: Express): Server {
       return res.status(403).send("Not a member of this workspace");
     }
 
-    const channelMessages = await db
-      .select()
-      .from(messages)
-      .where(
-        and(
-          eq(messages.channelId, channelId),
-          eq(messages.parentId, null) // Only get top-level messages
-        )
-      )
-      .orderBy(desc(messages.createdAt))
-      .limit(50);
-
-    // Get user and reaction info for each message
-    const enrichedMessages = await Promise.all(
-      channelMessages.map(async (message) => {
-        const [enriched] = await db.query.messages.findMany({
-          where: eq(messages.id, message.id),
+    const channelMessages = await db.query.messages.findMany({
+      where: and(
+        eq(messages.channelId, channelId),
+        eq(messages.parentId, null)
+      ),
+      orderBy: [desc(messages.createdAt)],
+      limit: 50,
+      with: {
+        user: true,
+        reactions: {
           with: {
             user: true,
-            reactions: {
-              with: {
-                user: true,
-              },
-            },
           },
-          limit: 1,
-        });
-        return enriched;
-      })
-    );
+        },
+      },
+    });
 
-    res.json(enrichedMessages);
+    res.json(channelMessages);
   });
 
   app.get("/api/messages/:messageId/thread", async (req, res) => {
@@ -246,37 +245,27 @@ export function registerRoutes(app: Express): Server {
     if (!user) return res.status(401).send("Not authenticated");
 
     const messageId = parseInt(req.params.messageId);
-    const threadMessages = await db
-      .select()
-      .from(messages)
-      .where(
-        or(
-          eq(messages.id, messageId),
-          eq(messages.parentId, messageId)
-        )
-      )
-      .orderBy(asc(messages.createdAt));
+    if (isNaN(messageId)) {
+      return res.status(400).send("Invalid message ID");
+    }
 
-    // Get user and reaction info for each message
-    const enrichedMessages = await Promise.all(
-      threadMessages.map(async (message) => {
-        const [enriched] = await db.query.messages.findMany({
-          where: eq(messages.id, message.id),
+    const threadMessages = await db.query.messages.findMany({
+      where: or(
+        eq(messages.id, messageId),
+        eq(messages.parentId, messageId)
+      ),
+      orderBy: [asc(messages.createdAt)],
+      with: {
+        user: true,
+        reactions: {
           with: {
             user: true,
-            reactions: {
-              with: {
-                user: true,
-              },
-            },
           },
-          limit: 1,
-        });
-        return enriched;
-      })
-    );
+        },
+      },
+    });
 
-    res.json(enrichedMessages);
+    res.json(threadMessages);
   });
 
   app.post("/api/messages", async (req, res) => {
@@ -284,17 +273,22 @@ export function registerRoutes(app: Express): Server {
     if (!user) return res.status(401).send("Not authenticated");
 
     const { content, channelId, parentId } = req.body;
+
+    const channelIdNum = parseInt(channelId);
+    if (isNaN(channelIdNum)) {
+      return res.status(400).send("Invalid channel ID");
+    }
+
     const [message] = await db
       .insert(messages)
       .values({
         content,
-        channelId,
-        parentId: parentId || null,
+        channelId: channelIdNum,
+        parentId: parentId ? parseInt(parentId) : null,
         userId: user.id,
       })
       .returning();
 
-    // Fetch complete message with user data
     const [completeMessage] = await db.query.messages.findMany({
       where: eq(messages.id, message.id),
       with: {
@@ -307,6 +301,10 @@ export function registerRoutes(app: Express): Server {
       },
       limit: 1,
     });
+
+    if (!completeMessage) {
+      return res.status(500).send("Failed to create message");
+    }
 
     res.json(completeMessage);
   });
@@ -326,12 +324,17 @@ export function registerRoutes(app: Express): Server {
     const user = req.user as Express.User;
     if (!user) return res.status(401).send("Not authenticated");
 
+    const messageId = parseInt(req.params.messageId);
+    if (isNaN(messageId)) {
+      return res.status(400).send("Invalid message ID");
+    }
+
     const { emoji } = req.body;
     const [reaction] = await db
       .insert(reactions)
       .values({
         emoji,
-        messageId: parseInt(req.params.messageId),
+        messageId,
         userId: user.id,
       })
       .returning();
@@ -344,6 +347,10 @@ export function registerRoutes(app: Express): Server {
       limit: 1,
     });
 
+    if (!completeReaction) {
+      return res.status(500).send("Failed to create reaction");
+    }
+
     res.json(completeReaction);
   });
 
@@ -351,11 +358,18 @@ export function registerRoutes(app: Express): Server {
     const user = req.user as Express.User;
     if (!user) return res.status(401).send("Not authenticated");
 
+    const messageId = parseInt(req.params.messageId);
+    const reactionId = parseInt(req.params.reactionId);
+
+    if (isNaN(messageId) || isNaN(reactionId)) {
+      return res.status(400).send("Invalid message or reaction ID");
+    }
+
     await db
       .delete(reactions)
       .where(
         and(
-          eq(reactions.id, parseInt(req.params.reactionId)),
+          eq(reactions.id, reactionId),
           eq(reactions.userId, user.id)
         )
       );

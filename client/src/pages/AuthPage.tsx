@@ -7,6 +7,20 @@ import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 import { useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
+import { Loader2, AlertCircle } from "lucide-react";
+
+type Workspace = {
+  id: number;
+  name: string;
+  organizationId: number;
+  createdAt: string;
+  organization?: {
+    id: number;
+    name: string;
+    domain?: string;
+  };
+};
 
 export default function AuthPage() {
   const { login, register } = useUser();
@@ -18,6 +32,12 @@ export default function AuthPage() {
   const workspaceId = location.startsWith('/workspace/') 
     ? parseInt(location.split('/')[2]) 
     : undefined;
+
+  // Fetch workspace details if workspaceId is present
+  const { data: workspace, isLoading: isLoadingWorkspace, error: workspaceError } = useQuery<Workspace>({
+    queryKey: [`/api/workspaces/${workspaceId}`],
+    enabled: !!workspaceId,
+  });
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>, isLogin: boolean) => {
     event.preventDefault();
@@ -52,12 +72,40 @@ export default function AuthPage() {
     }
   };
 
+  // Show loading state while fetching workspace details
+  if (workspaceId && isLoadingWorkspace) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <Loader2 className="h-8 w-8 animate-spin text-border" />
+      </div>
+    );
+  }
+
+  // Show error state if workspace fetch failed
+  if (workspaceId && workspaceError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <Card className="w-full max-w-md mx-4">
+          <CardContent className="pt-6">
+            <div className="flex mb-4 gap-2">
+              <AlertCircle className="h-8 w-8 text-red-500" />
+              <h1 className="text-2xl font-bold text-gray-900">Workspace Not Found</h1>
+            </div>
+            <p className="mt-4 text-sm text-gray-600">
+              The workspace you're trying to access doesn't exist or you don't have permission to access it.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
           <CardTitle className="text-2xl font-bold">
-            {workspaceId ? "Workspace Login" : "Welcome to ChatGenius"}
+            {workspace ? `${workspace.name} Login` : "Welcome to ChatGenius"}
           </CardTitle>
         </CardHeader>
         <CardContent>
