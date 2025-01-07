@@ -27,7 +27,11 @@ export function useWebSocket() {
   const activeChannelsRef = useRef<Set<string>>(new Set());
 
   const connect = useCallback(() => {
-    if (!user || wsRef.current?.readyState === WebSocket.OPEN || isConnectingRef.current)
+    if (
+      !user ||
+      wsRef.current?.readyState === WebSocket.OPEN ||
+      isConnectingRef.current
+    )
       return;
 
     isConnectingRef.current = true;
@@ -45,8 +49,10 @@ export function useWebSocket() {
       isConnectingRef.current = false;
 
       // Restore all active channel handlers after reconnection
-      activeChannelsRef.current.forEach(channelScope => {
-        const existingHandler = persistentHandlersRef.current.find(h => h.scope === channelScope);
+      activeChannelsRef.current.forEach((channelScope) => {
+        const existingHandler = persistentHandlersRef.current.find(
+          (h) => h.scope === channelScope,
+        );
         if (!existingHandler) {
           console.log(`Re-registering handler for ${channelScope}`);
         }
@@ -70,18 +76,28 @@ export function useWebSocket() {
         }
 
         // Process all handlers (both persistent and temporary)
-        const allHandlers = [...persistentHandlersRef.current, ...temporaryHandlersRef.current];
-
+        const allHandlers = [
+          ...persistentHandlersRef.current,
+          ...temporaryHandlersRef.current,
+        ];
+        console.log(allHandlers);
         allHandlers.forEach(({ handler, scope }) => {
           try {
             // Channel messages should be handled by channel handlers
             if (message.type === "message" && scope.startsWith("channel-")) {
-              console.log(`Processing channel message with handler (scope: ${scope})`);
+              console.log(
+                `Processing channel message with handler (scope: ${scope})`,
+              );
               handler(message);
             }
             // Thread messages should only be handled by thread handlers
-            else if (message.type === "thread_message" && scope.startsWith("thread-")) {
-              console.log(`Processing thread message with handler (scope: ${scope})`);
+            else if (
+              message.type === "thread_message" &&
+              scope.startsWith("thread-")
+            ) {
+              console.log(
+                `Processing thread message with handler (scope: ${scope})`,
+              );
               handler(message);
             }
           } catch (error) {
@@ -207,7 +223,10 @@ export function useWebSocket() {
   );
 
   const addMessageHandler = useCallback(
-    (handler: (message: WebSocketMessage) => void, scope: string = "global") => {
+    (
+      handler: (message: WebSocketMessage) => void,
+      scope: string = "global",
+    ) => {
       const handlerId = Math.random().toString(36).substring(7);
       const isPersistent = scope.startsWith("channel-");
 
@@ -227,7 +246,9 @@ export function useWebSocket() {
         activeChannelsRef.current.add(scope);
         // For channel handlers, keep them in persistent array
         // Don't allow duplicates, but ensure at least one handler exists
-        const existingHandlerIndex = persistentHandlersRef.current.findIndex(h => h.scope === scope);
+        const existingHandlerIndex = persistentHandlersRef.current.findIndex(
+          (h) => h.scope === scope,
+        );
         if (existingHandlerIndex !== -1) {
           persistentHandlersRef.current[existingHandlerIndex] = newHandler;
         } else {
@@ -236,10 +257,11 @@ export function useWebSocket() {
       } else {
         // For temporary handlers like threads, replace existing ones with same scope
         temporaryHandlersRef.current = temporaryHandlersRef.current.filter(
-          (h) => h.scope !== scope
+          (h) => h.scope !== scope,
         );
         temporaryHandlersRef.current.push(newHandler);
       }
+      console.log("Persistent handlers:", persistentHandlersRef);
 
       // Log current handlers for debugging
       console.log("Current handlers:", {
@@ -253,28 +275,30 @@ export function useWebSocket() {
         })),
       });
 
-      // Return cleanup function
-      return () => {
-        // Only remove temporary handlers during cleanup
-        if (!isPersistent) {
-          console.log(`Removing temporary handler (${handlerId}) for scope: ${scope}`);
-          temporaryHandlersRef.current = temporaryHandlersRef.current.filter(
-            (h) => h.id !== handlerId
-          );
-        }
+      // // Return cleanup function
+      // return () => {
+      //   // Only remove temporary handlers during cleanup
+      //   if (!isPersistent) {
+      //     console.log(
+      //       `Removing temporary handler (${handlerId}) for scope: ${scope}`,
+      //     );
+      //     temporaryHandlersRef.current = temporaryHandlersRef.current.filter(
+      //       (h) => h.id !== handlerId,
+      //     );
+      //   }
 
-        // Log handlers after cleanup
-        console.log("Remaining handlers after cleanup:", {
-          persistent: persistentHandlersRef.current.map((h) => ({
-            id: h.id,
-            scope: h.scope,
-          })),
-          temporary: temporaryHandlersRef.current.map((h) => ({
-            id: h.id,
-            scope: h.scope,
-          })),
-        });
-      };
+      //   // Log handlers after cleanup
+      //   console.log("Remaining handlers after cleanup:", {
+      //     persistent: persistentHandlersRef.current.map((h) => ({
+      //       id: h.id,
+      //       scope: h.scope,
+      //     })),
+      //     temporary: temporaryHandlersRef.current.map((h) => ({
+      //       id: h.id,
+      //       scope: h.scope,
+      //     })),
+      //   });
+      // };
     },
     [],
   );
