@@ -6,6 +6,20 @@ import { db } from "@db";
 import { channels, messages, reactions, channelMembers, organizations, workspaces, workspaceMembers } from "@db/schema";
 import { eq, and, asc, or, desc } from "drizzle-orm";
 import multer from "multer";
+import type { InferModel } from 'drizzle-orm';
+
+// Type definitions
+type Workspace = InferModel<typeof workspaces>;
+type Organization = InferModel<typeof organizations>;
+type Channel = InferModel<typeof channels>;
+
+type WorkspaceWithOrg = Workspace & {
+  organization: Organization | null;
+};
+
+type ChannelWithWorkspace = Channel & {
+  workspace: WorkspaceWithOrg;
+};
 
 // Configure multer for file uploads
 const upload = multer({
@@ -27,6 +41,123 @@ export function registerRoutes(app: Express): Server {
   setupWebSocket(httpServer);
 
   // Organization and Workspace routes
+  app.get("/api/workspaces/:workspaceId", async (req, res) => {
+    const workspaceId = parseInt(req.params.workspaceId);
+    if (isNaN(workspaceId)) {
+      return res.status(400).send("Invalid workspace ID");
+    }
+
+    try {
+      const workspaceResult = await db.query.workspaces.findFirst({
+        where: eq(workspaces.id, workspaceId),
+        with: {
+          organization: true,
+        },
+      }) as WorkspaceWithOrg | null;
+
+      if (!workspaceResult) {
+        return res.status(404).send("Workspace not found");
+      }
+
+      // If user is authenticated, check membership
+      if (req.user) {
+        const user = req.user as Express.User;
+        const memberResult = await db.query.workspaceMembers.findFirst({
+          where: and(
+            eq(workspaceMembers.workspaceId, workspaceId),
+            eq(workspaceMembers.userId, user.id)
+          ),
+        });
+
+        if (memberResult) {
+          // Return full workspace data for members
+          return res.json({
+            ...workspaceResult,
+            membership: memberResult,
+          });
+        }
+      }
+
+      // For non-members or non-authenticated users, return basic info
+      const publicWorkspaceData = {
+        id: workspaceResult.id,
+        name: workspaceResult.name,
+        organizationId: workspaceResult.organizationId,
+        createdAt: workspaceResult.createdAt,
+        organization: workspaceResult.organization
+          ? {
+              id: workspaceResult.organization.id,
+              name: workspaceResult.organization.name,
+              domain: workspaceResult.organization.domain,
+            }
+          : undefined,
+      };
+
+      return res.json(publicWorkspaceData);
+    } catch (error) {
+      console.error("Error fetching workspace:", error);
+      return res.status(500).send("Internal server error");
+    }
+  });
+
+  // Channel routes - updated with proper typing and error handling
+  app.get("/api/channels/:channelId/messages", async (req, res) => {
+    const user = req.user as Express.User;
+    if (!user) return res.status(401).send("Not authenticated");
+
+    const channelId = parseInt(req.params.channelId);
+    if (isNaN(channelId)) {
+      return res.status(400).send("Invalid channel ID");
+    }
+
+    // Get channel and verify workspace membership
+    const channel = await db.query.channels.findFirst({
+      where: eq(channels.id, channelId),
+      with: {
+        workspace: {
+          with: {
+            organization: true
+          }
+        }
+      },
+    }) as ChannelWithWorkspace | null;
+
+    if (!channel || !channel.workspace) {
+      return res.status(404).send("Channel not found");
+    }
+
+    // Verify workspace membership
+    const workspaceMember = await db.query.workspaceMembers.findFirst({
+      where: and(
+        eq(workspaceMembers.workspaceId, channel.workspace.id),
+        eq(workspaceMembers.userId, user.id)
+      ),
+    });
+
+    if (!workspaceMember) {
+      return res.status(403).send("Not a member of this workspace");
+    }
+
+    const channelMessages = await db.query.messages.findMany({
+      where: and(
+        eq(messages.channelId, channelId),
+        eq(messages.parentId, null)
+      ),
+      orderBy: [desc(messages.createdAt)],
+      limit: 50,
+      with: {
+        user: true,
+        reactions: {
+          with: {
+            user: true,
+          },
+        },
+      },
+    });
+
+    res.json(channelMessages);
+  });
+
   app.post("/api/organizations", async (req, res) => {
     const user = req.user as Express.User;
     if (!user) return res.status(401).send("Not authenticated");
@@ -77,42 +208,7 @@ export function registerRoutes(app: Express): Server {
     res.json(workspace);
   });
 
-  app.get("/api/workspaces/:workspaceId", async (req, res) => {
-    const user = req.user as Express.User;
-    if (!user) return res.status(401).send("Not authenticated");
 
-    const workspaceId = parseInt(req.params.workspaceId);
-    if (isNaN(workspaceId)) {
-      return res.status(400).send("Invalid workspace ID");
-    }
-
-    const workspace = await db.query.workspaces.findFirst({
-      where: eq(workspaces.id, workspaceId),
-      with: {
-        organization: true,
-      },
-    });
-
-    if (!workspace) {
-      return res.status(404).send("Workspace not found");
-    }
-
-    // Check if user is a member of this workspace
-    const member = await db.query.workspaceMembers.findFirst({
-      where: and(
-        eq(workspaceMembers.workspaceId, workspaceId),
-        eq(workspaceMembers.userId, user.id)
-      ),
-    });
-
-    if (!member) {
-      return res.status(403).send("Not a member of this workspace");
-    }
-
-    res.json(workspace);
-  });
-
-  // Channel routes - updated to work with workspaces
   app.get("/api/workspaces/:workspaceId/channels", async (req, res) => {
     const user = req.user as Express.User;
     if (!user) return res.status(401).send("Not authenticated");
@@ -186,60 +282,6 @@ export function registerRoutes(app: Express): Server {
     res.json(channel);
   });
 
-  // Message routes - updated with proper typing and error handling
-  app.get("/api/channels/:channelId/messages", async (req, res) => {
-    const user = req.user as Express.User;
-    if (!user) return res.status(401).send("Not authenticated");
-
-    const channelId = parseInt(req.params.channelId);
-    if (isNaN(channelId)) {
-      return res.status(400).send("Invalid channel ID");
-    }
-
-    // Get channel and verify workspace membership
-    const channel = await db.query.channels.findFirst({
-      where: eq(channels.id, channelId),
-      with: {
-        workspace: true,
-      },
-    });
-
-    if (!channel || !channel.workspace) {
-      return res.status(404).send("Channel not found");
-    }
-
-    // Verify workspace membership
-    const member = await db.query.workspaceMembers.findFirst({
-      where: and(
-        eq(workspaceMembers.workspaceId, channel.workspace.id),
-        eq(workspaceMembers.userId, user.id)
-      ),
-    });
-
-    if (!member) {
-      return res.status(403).send("Not a member of this workspace");
-    }
-
-    const channelMessages = await db.query.messages.findMany({
-      where: and(
-        eq(messages.channelId, channelId),
-        eq(messages.parentId, null)
-      ),
-      orderBy: [desc(messages.createdAt)],
-      limit: 50,
-      with: {
-        user: true,
-        reactions: {
-          with: {
-            user: true,
-          },
-        },
-      },
-    });
-
-    res.json(channelMessages);
-  });
-
   app.get("/api/messages/:messageId/thread", async (req, res) => {
     const user = req.user as Express.User;
     if (!user) return res.status(401).send("Not authenticated");
@@ -309,7 +351,6 @@ export function registerRoutes(app: Express): Server {
     res.json(completeMessage);
   });
 
-  // File upload
   app.post("/api/upload", upload.single("file"), async (req, res) => {
     const user = req.user as Express.User;
     if (!user) return res.status(401).send("Not authenticated");
@@ -319,7 +360,6 @@ export function registerRoutes(app: Express): Server {
     res.json({ url: fileUrl, name: req.file.originalname });
   });
 
-  // Reactions
   app.post("/api/messages/:messageId/reactions", async (req, res) => {
     const user = req.user as Express.User;
     if (!user) return res.status(401).send("Not authenticated");
