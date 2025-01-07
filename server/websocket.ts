@@ -10,7 +10,21 @@ interface Client extends WebSocket {
 }
 
 export function setupWebSocket(server: HttpServer) {
-  const wss = new WebSocketServer({ server, path: "/ws" });
+  const wss = new WebSocketServer({ 
+    noServer: true
+  });
+
+  server.on('upgrade', (request, socket, head) => {
+    if (request.headers['sec-websocket-protocol'] === 'vite-hmr') {
+      socket.destroy();
+      return;
+    }
+
+    wss.handleUpgrade(request, socket, head, (ws) => {
+      wss.emit('connection', ws, request);
+    });
+  });
+
   const clients = new Map<number, Client>();
 
   wss.on("connection", (ws: Client) => {
@@ -85,7 +99,7 @@ export function setupWebSocket(server: HttpServer) {
       }
     });
 
-    // Ping to keep connection alive
+    // Keep connection alive with ping/pong
     const pingInterval = setInterval(() => {
       if (ws.readyState === WebSocket.OPEN) {
         ws.ping();
