@@ -39,8 +39,13 @@ export default function MessageList({
   channelName,
   onThreadSelect,
 }: MessageListProps) {
-  const { messages, isLoading, sendMessage, addReaction } = useMessages(channelId ?? 0);
-  const { addMessageHandler, sendMessage: sendWebSocketMessage } = useWebSocket();
+  const { messages, isLoading, sendMessage, addReaction } = useMessages(
+    channelId ?? 0,
+  );
+  console.log("HERE");
+  console.log(messages);
+  const { addMessageHandler, sendMessage: sendWebSocketMessage } =
+    useWebSocket();
   const scrollRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
   const cleanupRef = useRef<(() => void) | null>(null);
@@ -68,24 +73,22 @@ export default function MessageList({
             (oldMessages = []) => {
               if (!oldMessages) return [newMessage];
 
-              // Update existing message or add new one
-              const messageExists = oldMessages.some((m) => m.id === newMessage.id);
-              if (messageExists) {
-                return oldMessages.map((m) =>
-                  m.id === newMessage.id ? { ...m, ...newMessage } : m,
-                );
-              }
-
               // Only add top-level messages
               if (!newMessage.parentId) {
-                return [...oldMessages, newMessage].sort(
+                return [...oldMessages, { ...newMessage, replyCount: 0 }].sort(
                   (a, b) =>
                     new Date(a.createdAt!).getTime() -
                     new Date(b.createdAt!).getTime(),
                 );
               }
 
-              return oldMessages;
+              // Update reply count for parent message
+              return oldMessages.map((msg) => {
+                if (msg.id === newMessage.parentId) {
+                  return { ...msg, replyCount: (msg.replyCount || 0) + 1 };
+                }
+                return msg;
+              });
             },
           );
         }
@@ -134,15 +137,8 @@ export default function MessageList({
   }
 
   // Filter out thread replies from the main channel view
-  const channelMessages = (messages as ChannelMessage[])?.filter((msg) => !msg.parentId) || [];
-
-  // Calculate reply counts for each top-level message
-  const replyCountMap: Record<number, number> = {};
-  messages?.forEach((msg: ChannelMessage) => {
-    if (msg.parentId) {
-      replyCountMap[msg.parentId] = (replyCountMap[msg.parentId] || 0) + 1;
-    }
-  });
+  const channelMessages =
+    (messages as ChannelMessage[])?.filter((msg) => !msg.parentId) || [];
 
   return (
     <div className="h-full flex flex-col">
@@ -158,8 +154,9 @@ export default function MessageList({
                 key={message.id}
                 message={message}
                 onThreadSelect={onThreadSelect}
-                onReactionAdd={(emoji) => addReaction({ messageId: message.id, emoji })}
-                replyCount={replyCountMap[message.id] || 0}
+                onReactionAdd={(emoji) =>
+                  addReaction({ messageId: message.id, emoji })
+                }
               />
             ))}
           </div>
@@ -180,22 +177,25 @@ type MessageItemProps = {
   message: ChannelMessage;
   onThreadSelect: (messageId: number) => void;
   onReactionAdd: (emoji: string) => void;
-  replyCount: number;
 };
 
 function MessageItem({
   message,
   onThreadSelect,
   onReactionAdd,
-  replyCount,
 }: MessageItemProps) {
   if (!message.user) return null;
 
   return (
     <div className="flex gap-3 group">
       <Avatar>
-        <AvatarImage src={message.user.avatar || undefined} alt={message.user.username} />
-        <AvatarFallback>{message.user.username[0].toUpperCase()}</AvatarFallback>
+        <AvatarImage
+          src={message.user.avatar || undefined}
+          alt={message.user.username}
+        />
+        <AvatarFallback>
+          {message.user.username[0].toUpperCase()}
+        </AvatarFallback>
       </Avatar>
 
       <div className="flex-1">
@@ -232,7 +232,7 @@ function MessageItem({
             className="flex items-center gap-1"
           >
             <MessageSquare className="h-4 w-4" />
-            Reply {replyCount > 0 && `(${replyCount})`}
+            Reply {message.replyCount > 0 && `(${message.replyCount})`}
           </Button>
 
           <Button variant="ghost" size="sm" onClick={() => onReactionAdd("👍")}>

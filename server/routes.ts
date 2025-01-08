@@ -13,7 +13,7 @@ import {
   users,
   directMessages,
 } from "@db/schema";
-import { eq, and, asc, desc, isNull, or } from "drizzle-orm";
+import { eq, and, asc, desc, isNull, or, sql } from "drizzle-orm";
 import multer from "multer";
 import type { InferModel } from "drizzle-orm";
 
@@ -330,40 +330,45 @@ export function registerRoutes(app: Express): Server {
 
       // Get only root messages (not thread replies)
       const channelMessages = await db
-        .select()
+        .select({
+          message: {
+            id: messages.id,
+            content: messages.content,
+            userId: messages.userId,
+            channelId: messages.channelId,
+            directMessageId: messages.directMessageId,
+            parentId: messages.parentId,
+            attachments: messages.attachments,
+            createdAt: messages.createdAt,
+            updatedAt: messages.updatedAt,
+          },
+          user: users,
+          replyCount: sql<number>`CAST((
+            SELECT COUNT(*) 
+            FROM ${messages} AS replies 
+            WHERE replies.parent_id = ${messages.id}
+          ) AS integer)`.mapWith(Number)
+        })
         .from(messages)
         .where(
-          and(eq(messages.channelId, channelId), isNull(messages.parentId)),
+          and(
+            eq(messages.channelId, channelId),
+            isNull(messages.parentId)
+          )
         )
+        .leftJoin(users, eq(messages.userId, users.id))
         .orderBy(desc(messages.createdAt))
         .limit(50);
 
-      const messagesWithDetails = await Promise.all(
-        channelMessages.map(async (message) => {
-          const messageReactions = await db
-            .select({
-              reaction: reactions,
-              user: users,
-            })
-            .from(reactions)
-            .leftJoin(users, eq(reactions.userId, users.id))
-            .where(eq(reactions.messageId, message.id));
+      const formattedMessages = channelMessages.map(({ message, user, replyCount }) => ({
+        message: {
+          ...message,
+          replyCount
+        },
+        user
+      }));
 
-          const [messageUser] = await db
-            .select()
-            .from(users)
-            .where(eq(users.id, message.userId!))
-            .limit(1);
-
-          return {
-            ...message,
-            reactions: messageReactions,
-            user: messageUser,
-          };
-        }),
-      );
-
-      res.json(messagesWithDetails);
+      res.json(formattedMessages);
     } catch (error) {
       console.error("Error fetching messages:", error);
       res.status(500).json({ error: "Internal server error" });
@@ -690,11 +695,26 @@ export function registerRoutes(app: Express): Server {
         conversation = inserted[0];
       }
 
-      // Get messages for this direct message conversation
+      // Get messages for this direct message conversation with reply counts
       const messageResults = await db
         .select({
-          message: messages,
+          message: {
+            id: messages.id,
+            content: messages.content,
+            userId: messages.userId,
+            channelId: messages.channelId,
+            directMessageId: messages.directMessageId,
+            parentId: messages.parentId,
+            attachments: messages.attachments,
+            createdAt: messages.createdAt,
+            updatedAt: messages.updatedAt,
+          },
           user: users,
+          replyCount: sql<number>`CAST((
+            SELECT COUNT(*) 
+            FROM ${messages} AS replies 
+            WHERE replies.parent_id = ${messages.id}
+          ) AS integer)`.mapWith(Number)
         })
         .from(messages)
         .where(
@@ -708,7 +728,15 @@ export function registerRoutes(app: Express): Server {
         .leftJoin(users, eq(messages.userId, users.id))
         .orderBy(asc(messages.createdAt));
 
-      res.json(messageResults);
+      const formattedMessages = messageResults.map(({ message, user, replyCount }) => ({
+        message: {
+          ...message,
+          replyCount
+        },
+        user
+      }));
+
+      res.json(formattedMessages);
     } catch (error) {
       console.error("Error fetching direct messages:", error);
       res.status(500).json({ error: "Internal server error" });
