@@ -2,12 +2,13 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
-import ChannelList from "@/components/chat/ChannelList";
+import ChatSidebar from "@/components/chat/ChatSidebar";
 import MessageList from "@/components/chat/MessageList";
 import ThreadView from "@/components/chat/ThreadView";
 import UserPresence from "@/components/chat/UserPresence";
 import WorkspaceSidebar from "@/components/chat/WorkspaceSidebar";
 import WorkspaceSelector from "@/components/chat/WorkspaceSelector";
+import DirectMessageChat from "@/components/chat/DirectMessageChat";
 import { useUser } from "@/hooks/use-user";
 import { Loader2 } from "lucide-react";
 
@@ -36,18 +37,11 @@ type Workspace = {
   };
 };
 
-type UserPresenceData = {
-  id: number;
-  username: string;
-  status?: string | null;
-  avatar?: string | null;
-  lastSeen?: Date | null;
-};
-
 export default function ChatPage() {
   const { user } = useUser();
   const [location, setLocation] = useLocation();
   const [selectedChannelId, setSelectedChannelId] = useState<number | null>(null);
+  const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
   const [selectedThreadId, setSelectedThreadId] = useState<number | null>(null);
   const [activeView, setActiveView] = useState('home');
 
@@ -67,21 +61,18 @@ export default function ChatPage() {
     enabled: !!workspaceId,
   });
 
-  if (!user) return null;
+  // Query for workspace users
+  const { data: users } = useQuery<{ username: string; id: number }[]>({
+    queryKey: [`/api/workspaces/${workspaceId}/users`],
+    enabled: !!workspaceId,
+  });
 
-  // Prepare user data for UserPresence component
-  const userPresenceData: UserPresenceData = {
-    id: user.id,
-    username: user.username,
-    avatar: user.avatar || null,
-    status: user.status || null,
-    lastSeen: user.lastSeen || null
-  };
+  if (!user) return null;
 
   const handleWorkspaceSelect = (selectedWorkspaceId: number) => {
     setLocation(`/workspace/${selectedWorkspaceId}`);
-    // Reset selected channel and thread when switching workspaces
     setSelectedChannelId(null);
+    setSelectedUserId(null);
     setSelectedThreadId(null);
   };
 
@@ -110,7 +101,13 @@ export default function ChatPage() {
           ) : (
             <WorkspaceSelector onSelect={handleWorkspaceSelect} />
           )}
-          <UserPresence user={userPresenceData} />
+          <UserPresence 
+            user={{
+              id: user.id,
+              username: user.username,
+              status: 'online'
+            }} 
+          />
         </div>
       </header>
 
@@ -123,51 +120,45 @@ export default function ChatPage() {
             />
           </ResizablePanel>
 
-          {activeView === 'home' && (
+          <ResizableHandle />
+
+          <ResizablePanel defaultSize={20} minSize={15} maxSize={30}>
+            <ChatSidebar
+              workspaceId={workspace.id}
+              selectedChannelId={selectedChannelId}
+              selectedUserId={selectedUserId}
+              onSelectChannel={setSelectedChannelId}
+              onSelectDirectMessage={setSelectedUserId}
+            />
+          </ResizablePanel>
+
+          <ResizableHandle />
+
+          <ResizablePanel defaultSize={50}>
+            {selectedUserId && users ? (
+              <DirectMessageChat
+                userId={selectedUserId}
+                username={users.find(u => u.id === selectedUserId)?.username || ''}
+              />
+            ) : (
+              <MessageList
+                channelId={selectedChannelId}
+                channelName={channels?.find(c => c.id === selectedChannelId)?.name}
+                onThreadSelect={setSelectedThreadId}
+              />
+            )}
+          </ResizablePanel>
+
+          {selectedThreadId && !selectedUserId && (
             <>
-              <ResizablePanel defaultSize={20} minSize={15} maxSize={30}>
-                <ChannelList
-                  selectedChannelId={selectedChannelId}
-                  onSelectChannel={setSelectedChannelId}
-                  channels={channels}
-                  workspaceId={workspace.id}
-                />
-              </ResizablePanel>
-
               <ResizableHandle />
-
-              <ResizablePanel defaultSize={50}>
-                <MessageList
-                  channelId={selectedChannelId}
-                  channelName={channels?.find(c => c.id === selectedChannelId)?.name}
-                  onThreadSelect={setSelectedThreadId}
+              <ResizablePanel defaultSize={30}>
+                <ThreadView
+                  messageId={selectedThreadId}
+                  onClose={() => setSelectedThreadId(null)}
                 />
               </ResizablePanel>
-
-              {selectedThreadId && (
-                <>
-                  <ResizableHandle />
-                  <ResizablePanel defaultSize={30}>
-                    <ThreadView
-                      messageId={selectedThreadId}
-                      onClose={() => setSelectedThreadId(null)}
-                    />
-                  </ResizablePanel>
-                </>
-              )}
             </>
-          )}
-
-          {activeView === 'dms' && (
-            <div className="flex-1 flex items-center justify-center text-muted-foreground">
-              Direct Messages feature coming soon
-            </div>
-          )}
-
-          {activeView === 'activity' && (
-            <div className="flex-1 flex items-center justify-center text-muted-foreground">
-              Activity feed feature coming soon
-            </div>
           )}
         </ResizablePanelGroup>
       ) : (

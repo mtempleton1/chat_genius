@@ -18,19 +18,21 @@ export default function ChatSidebar({
   selectedUserId,
 }: ChatSidebarProps) {
   return (
-    <div className="w-64 h-full border-r flex flex-col">
+    <div className="w-full h-full border-r flex flex-col">
       <ScrollArea className="flex-1">
         <div className="p-4 space-y-6">
-          <ChannelList
-            workspaceId={workspaceId}
-            selectedChannelId={selectedChannelId}
-            onSelectChannel={onSelectChannel}
-          />
-          <DirectMessagesList
-            workspaceId={workspaceId}
-            selectedUserId={selectedUserId}
-            onSelectUser={onSelectDirectMessage}
-          />
+          <div className="space-y-6">
+            <ChannelList
+              workspaceId={workspaceId}
+              selectedChannelId={selectedChannelId}
+              onSelectChannel={onSelectChannel}
+            />
+            <DirectMessagesList
+              workspaceId={workspaceId}
+              selectedUserId={selectedUserId}
+              onSelectUser={onSelectDirectMessage}
+            />
+          </div>
         </div>
       </ScrollArea>
     </div>
