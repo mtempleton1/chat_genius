@@ -83,6 +83,17 @@ export default function ChatPage() {
     setSelectedThreadId(null);
   }, [workspaceId]);
 
+  // Modified selection handlers for mutual exclusivity
+  const handleChannelSelect = (channelId: number) => {
+    setSelectedUserId(null); // Clear DM selection when selecting a channel
+    setSelectedChannelId(channelId);
+  };
+
+  const handleDirectMessageSelect = (userId: number) => {
+    setSelectedChannelId(null); // Clear channel selection when selecting a DM
+    setSelectedUserId(userId);
+  };
+
   if (!user) return null;
 
   const handleWorkspaceSelect = (selectedWorkspaceId: number) => {
@@ -146,8 +157,8 @@ export default function ChatPage() {
               workspaceId={workspace.id}
               selectedChannelId={selectedChannelId}
               selectedUserId={selectedUserId}
-              onSelectChannel={setSelectedChannelId}
-              onSelectDirectMessage={setSelectedUserId}
+              onSelectChannel={handleChannelSelect}
+              onSelectDirectMessage={handleDirectMessageSelect}
             />
           </ResizablePanel>
 
