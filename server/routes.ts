@@ -370,6 +370,76 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  app.post("/api/messages", async (req, res) => {
+    const user = req.user;
+    if (!user) return res.status(401).json({ error: "Not authenticated" });
+
+    const { content, channelId, parentId } = req.body;
+
+    if (!content) {
+      return res.status(400).json({ error: "Message content is required" });
+    }
+
+    try {
+      // Verify channel membership through workspace
+      const [channel] = await db
+        .select({
+          id: channels.id,
+          workspaceId: channels.workspaceId,
+        })
+        .from(channels)
+        .where(eq(channels.id, channelId))
+        .limit(1);
+
+      if (!channel) {
+        return res.status(404).json({ error: "Channel not found" });
+      }
+
+      // Verify workspace membership
+      const [workspaceMember] = await db
+        .select()
+        .from(workspaceMembers)
+        .where(
+          and(
+            eq(workspaceMembers.workspaceId, channel.workspaceId),
+            eq(workspaceMembers.userId, user.id),
+          ),
+        )
+        .limit(1);
+
+      if (!workspaceMember) {
+        return res.status(403).json({ error: "Not a member of this workspace" });
+      }
+
+      // Create the message
+      const [newMessage] = await db
+        .insert(messages)
+        .values({
+          content,
+          userId: user.id,
+          channelId,
+          parentId: parentId || null,
+        })
+        .returning();
+
+      // Fetch the created message with user details
+      const [messageWithUser] = await db
+        .select({
+          message: messages,
+          user: users,
+        })
+        .from(messages)
+        .where(eq(messages.id, newMessage.id))
+        .leftJoin(users, eq(messages.userId, users.id))
+        .limit(1);
+
+      res.json(messageWithUser);
+    } catch (error) {
+      console.error("Error creating message:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   app.get("/api/messages/:messageId/thread", async (req, res) => {
     const user = req.user;
     if (!user) return res.status(401).json({ error: "Not authenticated" });
