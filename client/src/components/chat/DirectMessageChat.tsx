@@ -1,5 +1,4 @@
 import { Loader2, MessageSquare } from "lucide-react";
-
 import { useEffect, useRef } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar } from "@/components/ui/avatar";
@@ -8,42 +7,36 @@ import { useDirectMessages } from "@/hooks/use-direct-messages";
 import { useUser } from "@/hooks/use-user";
 import FileUpload from "./FileUpload";
 import { useToast } from "@/hooks/use-toast";
-import type { Message, Reaction, User } from "@db/schema";
+import type { Message } from "@db/schema";
 
 type DirectMessageChatProps = {
   userId: number;
   username: string;
   workspaceId: number;
+  messages: Array<{
+    message: Message & {
+      directMessageId?: number | null;
+    };
+    user: {
+      id: number;
+      username: string;
+      avatar?: string | null;
+    };
+  }>;
   onThreadSelect: (messageId: number) => void;
 };
-
-// type DirectMessageResponse = {
-//   message: Message;
-//   user: User;
-// };
-
-// Add this type to match MessageList's ChannelMessage type
-// type DirectMessageResponse = Message & {
-//   user?: User;
-//   reactions?: Array<{
-//     reaction: Reaction;
-//     user: User;
-//   }>;
-//   attachments?: Array<{ url: string; name: string }> | null;
-// };
 
 export default function DirectMessageChat({
   userId,
   username,
   workspaceId,
+  messages,
   onThreadSelect,
 }: DirectMessageChatProps) {
-  const { messages, isLoading, sendMessage } = useDirectMessages(
+  const { isLoading, sendMessage } = useDirectMessages(
     workspaceId,
     userId,
   );
-  console.log("MESSSSAGEGGEGEGSS");
-  console.log(messages);
   const scrollRef = useRef<HTMLDivElement>(null);
   const { user: currentUser } = useUser();
   const { toast } = useToast();
@@ -145,29 +138,32 @@ export default function DirectMessageChat({
                     <p className="mt-1">{msg.message.content}</p>
                     <div className="mt-2 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
-                        onClick={() => onThreadSelect(msg.message.id)}
+                        onClick={() => {
+                          if (msg.message.directMessageId) {
+                            onThreadSelect(msg.message.id);
+                          }
+                        }}
                         className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
                       >
                         <MessageSquare className="h-4 w-4" />
                         Thread
                       </button>
                     </div>
-                    {msg.message.attachments &&
-                      msg.message.attachments.length > 0 && (
-                        <div className="mt-2 flex gap-2">
-                          {msg.message.attachments.map((attachment, index) => (
-                            <a
-                              key={index}
-                              href={attachment.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-sm text-blue-500 hover:underline"
-                            >
-                              {attachment.name}
-                            </a>
-                          ))}
-                        </div>
-                      )}
+                    {msg.message.attachments && msg.message.attachments.length > 0 && (
+                      <div className="mt-2 flex gap-2">
+                        {msg.message.attachments.map((attachment, index) => (
+                          <a
+                            key={index}
+                            href={attachment.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm text-blue-500 hover:underline"
+                          >
+                            {attachment.name}
+                          </a>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
@@ -179,7 +175,12 @@ export default function DirectMessageChat({
       <div className="p-4 border-t">
         <MessageInput
           onSendMessage={handleSendMessage}
-          fileUploadComponent={<FileUpload channelId={0} />}
+          fileUploadComponent={
+            <FileUpload 
+              channelId={0} 
+              directMessageId={messages[0]?.message?.directMessageId}
+            />
+          }
         />
       </div>
     </div>

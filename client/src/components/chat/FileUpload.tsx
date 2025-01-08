@@ -5,9 +5,10 @@ import { useToast } from "@/hooks/use-toast";
 
 type FileUploadProps = {
   channelId: number;
+  directMessageId?: number | null;
 };
 
-export default function FileUpload({ channelId }: FileUploadProps) {
+export default function FileUpload({ channelId, directMessageId }: FileUploadProps) {
   const [isUploading, setIsUploading] = useState(false);
   const { toast } = useToast();
   const fileInput = document.createElement("input");
@@ -17,7 +18,7 @@ export default function FileUpload({ channelId }: FileUploadProps) {
 
   const handleUpload = async (files: FileList) => {
     setIsUploading(true);
-    
+
     try {
       for (const file of Array.from(files)) {
         if (file.size > 5 * 1024 * 1024) {
@@ -32,6 +33,9 @@ export default function FileUpload({ channelId }: FileUploadProps) {
         const formData = new FormData();
         formData.append("file", file);
         formData.append("channelId", channelId.toString());
+        if (directMessageId) {
+          formData.append("directMessageId", directMessageId.toString());
+        }
 
         const response = await fetch("/api/upload", {
           method: "POST",

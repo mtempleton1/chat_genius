@@ -19,9 +19,11 @@ export function useMessages(
     mutationFn: async ({
       content,
       parentId,
+      directMessageId,
     }: {
       content: string;
       parentId?: number;
+      directMessageId?: number | null;
     }) => {
       const response = await fetch("/api/messages", {
         method: "POST",
@@ -30,6 +32,7 @@ export function useMessages(
           content,
           channelId: parentId ? messages?.[0].channelId : messageIdOrChannelId,
           parentId,
+          directMessageId,
         }),
         credentials: "include",
       });

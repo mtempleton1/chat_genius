@@ -41,6 +41,13 @@ type Workspace = {
   };
 };
 
+type Message = {
+  message: {
+    id: number;
+    directMessageId?: number | null;
+  }
+}
+
 export default function ChatPage() {
   const { user } = useUser();
   const [location, setLocation] = useLocation();
@@ -49,6 +56,7 @@ export default function ChatPage() {
   );
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
   const [selectedThreadId, setSelectedThreadId] = useState<number | null>(null);
+  const [threadDirectMessageId, setThreadDirectMessageId] = useState<number | null>(null);
   const [activeView, setActiveView] = useState("home");
 
   // Get workspace ID from URL if it exists
@@ -76,11 +84,36 @@ export default function ChatPage() {
     enabled: !!workspaceId && workspaceId > 0,
   });
 
+  // Mock messages data -  REPLACE THIS WITH YOUR ACTUAL MESSAGE QUERY
+  const [messages, setMessages] = useState<Message[] | null>(null);
+  useEffect(() => {
+    // Fetch messages based on selectedChannelId or selectedUserId
+    const fetchMessages = async () => {
+      if (selectedChannelId) {
+        // Fetch messages for channel
+        const response = await fetch(`/api/channels/${selectedChannelId}/messages`);
+        const data = await response.json();
+        setMessages(data);
+      } else if (selectedUserId) {
+        // Fetch messages for direct message
+        const response = await fetch(`/api/users/${selectedUserId}/messages`);
+        const data = await response.json();
+        setMessages(data);
+      } else {
+        setMessages(null);
+      }
+    };
+    fetchMessages();
+  }, [selectedChannelId, selectedUserId]);
+
+
   // Reset selections when workspace changes
   useEffect(() => {
     setSelectedChannelId(null);
     setSelectedUserId(null);
     setSelectedThreadId(null);
+    setThreadDirectMessageId(null);
+    setMessages(null);
   }, [workspaceId]);
 
   // Modified selection handlers for mutual exclusivity
@@ -92,6 +125,11 @@ export default function ChatPage() {
   const handleDirectMessageSelect = (userId: number) => {
     setSelectedChannelId(null); // Clear channel selection when selecting a DM
     setSelectedUserId(userId);
+  };
+
+  const handleThreadSelect = (messageId: number, directMessageId?: number | null) => {
+    setSelectedThreadId(messageId);
+    setThreadDirectMessageId(directMessageId || null);
   };
 
   if (!user) return null;
@@ -165,14 +203,18 @@ export default function ChatPage() {
           <ResizableHandle />
 
           <ResizablePanel defaultSize={50}>
-            {selectedUserId && users ? (
+            {selectedUserId && users && messages ? (
               <DirectMessageChat
                 userId={selectedUserId}
                 username={
                   users.find((u) => u.id === selectedUserId)?.username || ""
                 }
                 workspaceId={workspace!.id}
-                onThreadSelect={setSelectedThreadId}
+                messages={messages}
+                onThreadSelect={(messageId) => {
+                  const message = messages?.find(m => m.message.id === messageId);
+                  handleThreadSelect(messageId, message?.message.directMessageId);
+                }}
               />
             ) : (
               <MessageList
@@ -180,7 +222,7 @@ export default function ChatPage() {
                 channelName={
                   channels?.find((c) => c.id === selectedChannelId)?.name
                 }
-                onThreadSelect={setSelectedThreadId}
+                onThreadSelect={(messageId) => handleThreadSelect(messageId)}
               />
             )}
           </ResizablePanel>
@@ -191,7 +233,11 @@ export default function ChatPage() {
               <ResizablePanel defaultSize={30}>
                 <ThreadView
                   messageId={selectedThreadId}
-                  onClose={() => setSelectedThreadId(null)}
+                  directMessageId={threadDirectMessageId}
+                  onClose={() => {
+                    setSelectedThreadId(null);
+                    setThreadDirectMessageId(null);
+                  }}
                 />
               </ResizablePanel>
             </>

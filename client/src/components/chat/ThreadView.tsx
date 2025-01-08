@@ -9,11 +9,11 @@ import MessageInput from "./MessageInput";
 import FileUpload from "./FileUpload";
 import type { Message, User, Reaction } from "@db/schema";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { ConsoleLogWriter } from "drizzle-orm";
 
 type ThreadViewProps = {
   messageId: number;
   onClose: () => void;
+  directMessageId?: number | null; // Add this prop to support direct messages
 };
 
 type ThreadMessage = Message & {
@@ -22,15 +22,13 @@ type ThreadMessage = Message & {
   attachments?: Array<{ url: string; name: string }> | null;
 };
 
-export default function ThreadView({ messageId, onClose }: ThreadViewProps) {
+export default function ThreadView({ messageId, onClose, directMessageId }: ThreadViewProps) {
   const { messages, isLoading, sendMessage } = useMessages(messageId, true);
   const queryClient = useQueryClient(); 
   const { addMessageHandler, sendMessage: sendWebSocketMessage } = useWebSocket();
   const handlerRef = useRef<(() => void) | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  console.log("Thread view");
-  console.log(messages);
-  console.log(messageId);
+
   useEffect(() => {
     const scrollElement = scrollRef.current;
     if (scrollElement) {
@@ -60,13 +58,13 @@ export default function ThreadView({ messageId, onClose }: ThreadViewProps) {
                 content: msg.content,
                 userId: msg.userId,
                 channelId: msg.channelId,
+                directMessageId: msg.directMessageId, // Add support for directMessageId
                 parentId: msg.parentId,
                 createdAt: msg.createdAt || new Date(),
                 updatedAt: msg.createdAt || new Date(),
                 user: msg.user,
                 reactions: [],
                 attachments: msg.attachments || null,
-                directMessageId: null
               };
 
               console.log("Updating thread messages:", {
@@ -108,7 +106,11 @@ export default function ThreadView({ messageId, onClose }: ThreadViewProps) {
     if (!messageId) return;
 
     try {
-      const newMessage = await sendMessage({ content, parentId: messageId });
+      const newMessage = await sendMessage({ 
+        content, 
+        parentId: messageId,
+        directMessageId // Pass the directMessageId if it exists
+      });
       console.log("Sending thread message:", newMessage);
 
       // Send both thread_message and regular message updates
@@ -116,6 +118,7 @@ export default function ThreadView({ messageId, onClose }: ThreadViewProps) {
       sendWebSocketMessage({
         type: "thread_message",
         channelId: newMessage.channelId,
+        directMessageId: newMessage.directMessageId, // Add directMessageId to the WebSocket message
         messageId: newMessage.id,
         parentId: messageId,
         content: newMessage.content,
@@ -125,10 +128,11 @@ export default function ThreadView({ messageId, onClose }: ThreadViewProps) {
         createdAt: newMessage.createdAt,
       });
 
-      // message for channel view thread count updates
+      // message for channel/DM view thread count updates
       sendWebSocketMessage({
         type: "message",
         channelId: newMessage.channelId,
+        directMessageId: newMessage.directMessageId, // Add directMessageId here as well
         newMessage,
       });
     } catch (error) {
@@ -157,8 +161,6 @@ export default function ThreadView({ messageId, onClose }: ThreadViewProps) {
   }
 
   const parentMessage = messages?.[0] as ThreadMessage;
-  console.log("Parent message");
-  console.log(parentMessage);
   if (!parentMessage) {
     return (
       <div className="h-full flex flex-col border-l">
@@ -198,25 +200,21 @@ export default function ThreadView({ messageId, onClose }: ThreadViewProps) {
       <div className="p-4 border-t">
         <MessageInput
           onSendMessage={handleSendMessage}
-          fileUploadComponent={<FileUpload channelId={parentMessage.channelId!} />}
+          fileUploadComponent={
+            <FileUpload 
+              channelId={parentMessage.channelId || 0} 
+              directMessageId={directMessageId}
+            />
+          }
         />
       </div>
     </div>
   );
 }
 
-type ThreadMessageProps = {
-  message: ThreadMessage;
-  isParent?: boolean;
-};
-
-function ThreadMessage({ message, isParent }: ThreadMessageProps) {
+function ThreadMessage({ message, isParent }: { message: ThreadMessage; isParent?: boolean }) {
   if (!message.user) return null;
-  console.log("thread view")
-  console.log(message);
-  console.log(message.user);
-  console.log(message.createdAt);
-  console.log(message.content);
+
   return (
     <div className={`p-4 ${isParent ? "bg-accent rounded-lg" : ""}`}>
       <div className="flex items-center gap-2">

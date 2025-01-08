@@ -13,7 +13,7 @@ import {
   users,
   directMessages,
 } from "@db/schema";
-import { eq, and, asc, or, desc, isNull } from "drizzle-orm";
+import { eq, and, asc, desc, isNull, or } from "drizzle-orm";
 import multer from "multer";
 import type { InferModel } from "drizzle-orm";
 
@@ -374,25 +374,53 @@ export function registerRoutes(app: Express): Server {
     const user = req.user;
     if (!user) return res.status(401).json({ error: "Not authenticated" });
 
-    const { content, channelId, parentId } = req.body;
+    const { content, channelId, parentId, directMessageId } = req.body;
 
     if (!content) {
       return res.status(400).json({ error: "Message content is required" });
     }
 
-    try {
-      // Verify channel membership through workspace
-      const [channel] = await db
-        .select({
-          id: channels.id,
-          workspaceId: channels.workspaceId,
-        })
-        .from(channels)
-        .where(eq(channels.id, channelId))
-        .limit(1);
+    if (!channelId && !directMessageId) {
+      return res.status(400).json({ error: "Either channelId or directMessageId is required" });
+    }
 
-      if (!channel) {
-        return res.status(404).json({ error: "Channel not found" });
+    try {
+      let workspaceId: number;
+
+      if (channelId) {
+        // Verify channel membership through workspace
+        const [channel] = await db
+          .select({
+            id: channels.id,
+            workspaceId: channels.workspaceId,
+          })
+          .from(channels)
+          .where(eq(channels.id, channelId))
+          .limit(1);
+
+        if (!channel) {
+          return res.status(404).json({ error: "Channel not found" });
+        }
+
+        workspaceId = channel.workspaceId;
+      } else if (directMessageId) {
+        // Verify direct message membership through workspace
+        const [dm] = await db
+          .select({
+            id: directMessages.id,
+            workspaceId: directMessages.workspaceId,
+          })
+          .from(directMessages)
+          .where(eq(directMessages.id, directMessageId))
+          .limit(1);
+
+        if (!dm) {
+          return res.status(404).json({ error: "Direct message conversation not found" });
+        }
+
+        workspaceId = dm.workspaceId;
+      } else {
+        return res.status(400).json({ error: "Invalid request" });
       }
 
       // Verify workspace membership
@@ -401,7 +429,7 @@ export function registerRoutes(app: Express): Server {
         .from(workspaceMembers)
         .where(
           and(
-            eq(workspaceMembers.workspaceId, channel.workspaceId),
+            eq(workspaceMembers.workspaceId, workspaceId),
             eq(workspaceMembers.userId, user.id),
           ),
         )
@@ -417,7 +445,8 @@ export function registerRoutes(app: Express): Server {
         .values({
           content,
           userId: user.id,
-          channelId,
+          channelId: channelId || null,
+          directMessageId: directMessageId || null,
           parentId: parentId || null,
         })
         .returning();
@@ -451,7 +480,7 @@ export function registerRoutes(app: Express): Server {
   app.get("/api/messages/:messageId/thread", async (req, res) => {
     const user = req.user;
     if (!user) return res.status(401).json({ error: "Not authenticated" });
-    
+
     const messageId = parseInt(req.params.messageId);
     if (isNaN(messageId)) {
       return res.status(400).json({ error: "Invalid message ID" });
