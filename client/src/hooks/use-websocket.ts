@@ -275,30 +275,15 @@ export function useWebSocket() {
         })),
       });
 
-      // // Return cleanup function
-      // return () => {
-      //   // Only remove temporary handlers during cleanup
-      //   if (!isPersistent) {
-      //     console.log(
-      //       `Removing temporary handler (${handlerId}) for scope: ${scope}`,
-      //     );
-      //     temporaryHandlersRef.current = temporaryHandlersRef.current.filter(
-      //       (h) => h.id !== handlerId,
-      //     );
-      //   }
-
-      //   // Log handlers after cleanup
-      //   console.log("Remaining handlers after cleanup:", {
-      //     persistent: persistentHandlersRef.current.map((h) => ({
-      //       id: h.id,
-      //       scope: h.scope,
-      //     })),
-      //     temporary: temporaryHandlersRef.current.map((h) => ({
-      //       id: h.id,
-      //       scope: h.scope,
-      //     })),
-      //   });
-      // };
+      // Return cleanup function
+      return () => {
+        if (!isPersistent) {
+          console.log(`Removing temporary handler (${handlerId}) for scope: ${scope}`);
+          temporaryHandlersRef.current = temporaryHandlersRef.current.filter(
+            (h) => h.id !== handlerId
+          );
+        }
+      };
     },
     [],
   );

@@ -99,9 +99,10 @@ export default function MessageList({
         } catch (error) {
           console.error("Error handling channel message:", error);
         }
+        return () => {};
       }, `channel-${channelId}`);
 
-      cleanupRef.current = cleanup;
+      cleanupRef.current = () => cleanup();
     }
 
     return () => {

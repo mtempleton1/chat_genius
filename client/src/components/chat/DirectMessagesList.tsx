@@ -19,13 +19,15 @@ export default function DirectMessagesList({
   onSelectUser,
   workspaceId 
 }: DirectMessagesListProps) {
-  const { data: users, isLoading, error } = useQuery<WorkspaceUser[]>({
+  const { data: users, isLoading, error } = useQuery({
     queryKey: [`/api/workspaces/${workspaceId}/users`],
+    queryFn: async () => {
+      const response = await fetch(`/api/workspaces/${workspaceId}/users`);
+      if (!response.ok) throw new Error('Failed to fetch users');
+      return response.json() as Promise<WorkspaceUser[]>;
+    },
     enabled: !!workspaceId && workspaceId > 0,
-    retry: false,
-    onError: (error) => {
-      console.error("DirectMessagesList error:", error);
-    }
+    retry: false
   });
 
   const displayedUsers = users || [];

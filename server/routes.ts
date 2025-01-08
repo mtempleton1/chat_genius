@@ -435,5 +435,48 @@ export function registerRoutes(app: Express): Server {
     res.json({ url: fileUrl, name: req.file.originalname });
   });
 
+  // Add endpoint to update user's current workspace
+  app.post("/api/user/workspace", async (req, res) => {
+    if (!req.user) return res.status(401).json({ error: "Not authenticated" });
+
+    const workspaceId = req.body.workspaceId;
+    if (!workspaceId) {
+      return res.status(400).json({ error: "Workspace ID is required" });
+    }
+
+    try {
+      // Verify workspace membership
+      const [member] = await db
+        .select()
+        .from(workspaceMembers)
+        .where(
+          and(
+            eq(workspaceMembers.userId, req.user.id),
+            eq(workspaceMembers.workspaceId, workspaceId)
+          )
+        )
+        .limit(1);
+
+      if (!member) {
+        return res.status(403).json({ error: "Not a member of this workspace" });
+      }
+
+      // Update the session with new workspace ID after null check
+      req.user.workspaceId = workspaceId;
+
+      return res.json({
+        message: "Workspace updated successfully",
+        user: {
+          id: req.user.id,
+          username: req.user.username,
+          workspaceId
+        }
+      });
+    } catch (error) {
+      console.error("Error updating workspace:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   return httpServer;
 }

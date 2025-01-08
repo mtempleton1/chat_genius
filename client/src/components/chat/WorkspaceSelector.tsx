@@ -34,17 +34,18 @@ export default function WorkspaceSelector({ onSelect }: WorkspaceSelectorProps) 
   // Add mutation for setting workspace
   const setWorkspace = useMutation({
     mutationFn: async (workspaceId: number) => {
+      console.log('Setting workspace:', workspaceId);
       const response = await fetch('/api/user/workspace', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ workspaceId }),
         credentials: 'include',
       });
+      console.log('Response:', response);
 
       if (!response.ok) {
         throw new Error(await response.text());
       }
-
       return response.json();
     },
     onSuccess: (data) => {
@@ -56,6 +57,7 @@ export default function WorkspaceSelector({ onSelect }: WorkspaceSelectorProps) 
       onSelect(data.user.workspaceId);
     },
     onError: (error) => {
+      console.error('Error switching workspace:', error);
       toast({
         title: 'Error',
         description: error.message || 'Failed to switch workspace',
