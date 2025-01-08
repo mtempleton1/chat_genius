@@ -23,6 +23,7 @@ type ChannelMessage = Message & {
     avatar?: string | null;
   };
   attachments?: Array<{ url: string; name: string }> | null;
+  replyCount?: number; // Added replyCount
 };
 
 export default function MessageList({
@@ -250,7 +251,7 @@ function MessageItem({
             }}
           >
             <MessageSquare className="h-4 w-4 mr-1" />
-            Reply
+            Reply {message.replyCount > 0 && `(${message.replyCount})`}
           </Button>
 
           <Button variant="ghost" size="sm" onClick={() => onReactionAdd("👍")}>

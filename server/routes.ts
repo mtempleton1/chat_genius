@@ -13,7 +13,7 @@ import {
   users,
   directMessages,
 } from "@db/schema";
-import { eq, and, asc, desc, isNull, or } from "drizzle-orm";
+import { eq, and, asc, desc, isNull, or, sql } from "drizzle-orm";
 import multer from "multer";
 import type { InferModel } from "drizzle-orm";
 
@@ -352,6 +352,12 @@ export function registerRoutes(app: Express): Server {
 
       const messagesWithDetails = await Promise.all(
         channelMessages.map(async (message) => {
+          // Get reply count for this message
+          const [{ count }] = await db
+            .select({ count: sql`count(*)::int` })
+            .from(messages)
+            .where(eq(messages.parentId, message.id));
+
           const messageReactions = await db
             .select({
               reaction: reactions,
@@ -369,6 +375,7 @@ export function registerRoutes(app: Express): Server {
 
           return {
             ...message,
+            replyCount: count,
             reactions: messageReactions,
             user: messageUser,
           };
@@ -467,7 +474,7 @@ export function registerRoutes(app: Express): Server {
           directMessageId: directMessageId || null,
           parentId: parentId || null,
         })
-        .returning();
+        .returning() as Message[];
 
       // Fetch the created message with user details
       const [messageWithUser] = await db
@@ -728,23 +735,40 @@ export function registerRoutes(app: Express): Server {
           conversation = inserted[0];
         }
 
-        // Get messages for this direct message conversation
-        const messageResults = await db
-          .select({
-            message: messages,
-            user: users,
-          })
-          .from(messages)
-          .where(
-            and(
-              eq(messages.directMessageId, conversation.id),
-              parentId
-                ? eq(messages.parentId, parseInt(parentId as string))
-                : isNull(messages.parentId),
-            ),
-          )
-          .leftJoin(users, eq(messages.userId, users.id))
-          .orderBy(asc(messages.createdAt));
+        // Get messages for this direct message conversation with reply counts
+        const messageResults = await Promise.all(
+          (await db
+            .select({
+              message: messages,
+              user: users,
+            })
+            .from(messages)
+            .where(
+              and(
+                eq(messages.directMessageId, conversation.id),
+                parentId
+                  ? eq(messages.parentId, parseInt(parentId as string))
+                  : isNull(messages.parentId),
+              ),
+            )
+            .leftJoin(users, eq(messages.userId, users.id))
+            .orderBy(asc(messages.createdAt)))
+            .map(async (result: { message: Message; user: User }) => {
+              // Get reply count for this message
+              const [{ count }] = await db
+                .select({ count: sql`count(*)::int` })
+                .from(messages)
+                .where(eq(messages.parentId, result.message.id));
+
+              return {
+                message: {
+                  ...result.message,
+                  replyCount: count,
+                },
+                user: result.user,
+              };
+            })
+        );
 
         res.json(messageResults);
       } catch (error) {

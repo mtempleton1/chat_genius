@@ -142,7 +142,7 @@ export default function DirectMessageChat({
                         className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
                       >
                         <MessageSquare className="h-4 w-4" />
-                        Thread
+                        Thread {msg.message.replyCount > 0 && `(${msg.message.replyCount})`}
                       </button>
                     </div>
                     {msg.message.attachments && msg.message.attachments.length > 0 && (

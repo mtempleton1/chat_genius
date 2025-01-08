@@ -80,12 +80,25 @@ app.use((req, res, next) => {
     }
 
     // Start server on port 5000
-    server.listen(5000, "0.0.0.0", () => {
-      log(`Server started on port 5000`);
-    }).on('error', (error: NodeJS.ErrnoException) => {
-      console.error('Failed to start server:', error);
-      process.exit(1);
-    });
+    const PORT = 5000;
+    const startServer = () => {
+      server.listen(PORT, "0.0.0.0", () => {
+        log(`Server started on port ${PORT}`);
+      }).on('error', (error: NodeJS.ErrnoException) => {
+        if (error.code === 'EADDRINUSE') {
+          log(`Port ${PORT} in use, retrying in 1 second...`);
+          setTimeout(() => {
+            server.close();
+            startServer();
+          }, 1000);
+        } else {
+          console.error('Failed to start server:', error);
+          process.exit(1);
+        }
+      });
+    };
+
+    startServer();
 
   } catch (error) {
     console.error('Failed to start server:', error);
