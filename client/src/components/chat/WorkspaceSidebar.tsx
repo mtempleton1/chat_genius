@@ -101,15 +101,12 @@ export default function WorkspaceSidebar({
               size="icon"
               className="w-11 h-11 rounded-lg hover:bg-sidebar-accent hover:text-sidebar-accent-foreground relative"
             >
-              {user?.avatar ? (
-                <img
-                  src={user.avatar}
-                  alt={user.username}
-                  className="h-7 w-7 rounded-full"
-                />
-              ) : (
-                <UserCircle className="h-7 w-7" />
-              )}
+              <Avatar>
+                <AvatarImage src={user?.avatar || ''} alt={user.username} />
+                <AvatarFallback>
+                  <UserIcon className="h-5 w-5" />
+                </AvatarFallback>
+              </Avatar>
               {user?.status && (
                 <div className="absolute bottom-1 right-1 w-2 h-2 bg-green-500 rounded-full" />
               )}
