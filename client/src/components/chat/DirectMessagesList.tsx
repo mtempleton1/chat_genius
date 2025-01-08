@@ -21,7 +21,8 @@ export default function DirectMessagesList({
 }: DirectMessagesListProps) {
   const { data: users, isLoading, error } = useQuery<WorkspaceUser[]>({
     queryKey: [`/api/workspaces/${workspaceId}/users`],
-    enabled: !!workspaceId,
+    enabled: !!workspaceId && workspaceId > 0,
+    retry: false
   });
 
   const displayedUsers = users || [];
@@ -60,7 +61,7 @@ export default function DirectMessagesList({
         )}
         {error && (
           <div className="px-2 py-1 text-sm text-destructive">
-            Error loading users: {error instanceof Error ? error.message : 'Unknown error'}
+            Error loading users
           </div>
         )}
         {!isLoading && !error && displayedUsers.length === 0 && (

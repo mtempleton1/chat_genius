@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
@@ -52,28 +52,32 @@ export default function ChatPage() {
 
   const { data: workspace, isLoading: isLoadingWorkspace } = useQuery<Workspace>({
     queryKey: [`/api/workspaces/${workspaceId}`],
-    enabled: !!workspaceId,
+    enabled: !!workspaceId && workspaceId > 0,
   });
 
   // Query for channels when workspace is selected
   const { data: channels } = useQuery<Channel[]>({
     queryKey: [`/api/workspaces/${workspaceId}/channels`],
-    enabled: !!workspaceId,
+    enabled: !!workspaceId && workspaceId > 0,
   });
 
   // Query for workspace users
   const { data: users, isLoading: isLoadingUsers } = useQuery<{ username: string; id: number }[]>({
     queryKey: [`/api/workspaces/${workspaceId}/users`],
-    enabled: !!workspaceId,
+    enabled: !!workspaceId && workspaceId > 0,
   });
+
+  // Reset selections when workspace changes
+  useEffect(() => {
+    setSelectedChannelId(null);
+    setSelectedUserId(null);
+    setSelectedThreadId(null);
+  }, [workspaceId]);
 
   if (!user) return null;
 
   const handleWorkspaceSelect = (selectedWorkspaceId: number) => {
     setLocation(`/workspace/${selectedWorkspaceId}`);
-    setSelectedChannelId(null);
-    setSelectedUserId(null);
-    setSelectedThreadId(null);
   };
 
   // Only show loading state when we're waiting for a specific workspace
