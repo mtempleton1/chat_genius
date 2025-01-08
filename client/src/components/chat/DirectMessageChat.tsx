@@ -1,4 +1,3 @@
-
 import { Loader2, MessageSquare } from "lucide-react";
 
 import { useEffect, useRef } from "react";
@@ -8,7 +7,6 @@ import MessageInput from "./MessageInput";
 import { useDirectMessages } from "@/hooks/use-direct-messages";
 import { useUser } from "@/hooks/use-user";
 import FileUpload from "./FileUpload";
-import { Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { Message, User } from "@db/schema";
 
@@ -16,7 +14,7 @@ type DirectMessageChatProps = {
   userId: number;
   username: string;
   workspaceId: number;
-  onThreadSelect?: (messageId: number) => void;
+  onThreadSelect: (messageId: number) => void;
 };
 
 type DirectMessageResponse = {
@@ -24,8 +22,16 @@ type DirectMessageResponse = {
   user: User;
 };
 
-export default function DirectMessageChat({ userId, username, workspaceId }: DirectMessageChatProps) {
-  const { messages, isLoading, sendMessage } = useDirectMessages(workspaceId, userId);
+export default function DirectMessageChat({
+  userId,
+  username,
+  workspaceId,
+  onThreadSelect,
+}: DirectMessageChatProps) {
+  const { messages, isLoading, sendMessage } = useDirectMessages(
+    workspaceId,
+    userId,
+  );
   const scrollRef = useRef<HTMLDivElement>(null);
   const { user: currentUser } = useUser();
   const { toast } = useToast();
@@ -77,7 +83,11 @@ export default function DirectMessageChat({ userId, username, workspaceId }: Dir
         <span className="font-medium">{username}</span>
       </div>
 
-      <ScrollArea className="flex-1" ref={scrollRef} onScrollCapture={handleScroll}>
+      <ScrollArea
+        className="flex-1"
+        ref={scrollRef}
+        onScrollCapture={handleScroll}
+      >
         <div className="p-4 space-y-4">
           {isLoading ? (
             <div className="flex items-center justify-center h-full">
@@ -90,10 +100,12 @@ export default function DirectMessageChat({ userId, username, workspaceId }: Dir
           ) : (
             <div className="space-y-4">
               {messages.map((msg: DirectMessageResponse) => (
-                <div 
-                  key={msg.message.id} 
+                <div
+                  key={msg.message.id}
                   className={`flex gap-2 ${
-                    msg.message.userId === currentUser?.id ? 'justify-end' : 'justify-start'
+                    msg.message.userId === currentUser?.id
+                      ? "justify-end"
+                      : "justify-start"
                   }`}
                 >
                   {msg.message.userId !== currentUser?.id && (
@@ -103,11 +115,13 @@ export default function DirectMessageChat({ userId, username, workspaceId }: Dir
                       </div>
                     </Avatar>
                   )}
-                  <div className={`max-w-[70%] ${
-                    msg.message.userId === currentUser?.id 
-                      ? 'bg-primary text-primary-foreground' 
-                      : 'bg-secondary'
-                  } rounded-lg p-3`}>
+                  <div
+                    className={`max-w-[70%] ${
+                      msg.message.userId === currentUser?.id
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-secondary"
+                    } rounded-lg p-3`}
+                  >
                     <div className="flex items-baseline gap-2">
                       <span className="font-semibold text-sm">
                         {msg.user.username}
@@ -119,28 +133,29 @@ export default function DirectMessageChat({ userId, username, workspaceId }: Dir
                     <p className="mt-1">{msg.message.content}</p>
                     <div className="mt-2 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
-                        onClick={() => onThreadSelect?.(msg.message.id)}
+                        onClick={() => onThreadSelect(msg.message.id)}
                         className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
                       >
                         <MessageSquare className="h-4 w-4" />
                         Thread
                       </button>
                     </div>
-                    {msg.message.attachments && msg.message.attachments.length > 0 && (
-                      <div className="mt-2 flex gap-2">
-                        {msg.message.attachments.map((attachment, index) => (
-                          <a
-                            key={index}
-                            href={attachment.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-sm text-blue-500 hover:underline"
-                          >
-                            {attachment.name}
-                          </a>
-                        ))}
-                      </div>
-                    )}
+                    {msg.message.attachments &&
+                      msg.message.attachments.length > 0 && (
+                        <div className="mt-2 flex gap-2">
+                          {msg.message.attachments.map((attachment, index) => (
+                            <a
+                              key={index}
+                              href={attachment.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-sm text-blue-500 hover:underline"
+                            >
+                              {attachment.name}
+                            </a>
+                          ))}
+                        </div>
+                      )}
                   </div>
                 </div>
               ))}
