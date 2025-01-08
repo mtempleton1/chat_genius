@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { User } from "lucide-react";
+import { User as UserIcon } from "lucide-react";
 import { useWebSocket } from "@/hooks/use-websocket";
 import { useUser } from "@/hooks/use-user";
 import {
@@ -34,7 +34,7 @@ export default function UserPresence({ user }: UserPresenceProps) {
           <Avatar>
             <AvatarImage src={user.avatar || ''} alt={user.username} />
             <AvatarFallback>
-              <User className="h-6 w-6" />
+              <UserIcon className="h-6 w-6" />
             </AvatarFallback>
           </Avatar>
           <div className="text-sm">
