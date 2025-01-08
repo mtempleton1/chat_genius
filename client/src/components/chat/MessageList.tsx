@@ -16,15 +16,22 @@ type MessageListProps = {
   onThreadSelect: (messageId: number) => void;
 };
 
-type ChannelMessage = Message & {
-  user?: {
+type ChannelMessage = {
+  id: number;
+  content: string;
+  createdAt: Date | null;
+  updatedAt: Date | null;
+  userId: number | null;
+  channelId: number | null;
+  directMessageId: number | null;
+  parentId: number | null;
+  replyCount: number;
+  attachments: Array<{ url: string; name: string }> | null;
+  user: {
     id: number;
     username: string;
     avatar?: string | null;
   };
-  attachments?: Array<{ url: string; name: string }> | null;
-  parentId?: number | null;
-  replyCount?: number;
 };
 
 export default function MessageList({
@@ -32,9 +39,7 @@ export default function MessageList({
   channelName,
   onThreadSelect,
 }: MessageListProps) {
-  const { messages, isLoading, sendMessage, addReaction } = useMessages(
-    channelId ?? 0,
-  );
+  const { messages, isLoading, sendMessage, addReaction } = useMessages(channelId ?? 0);
   const { addMessageHandler, sendMessage: sendWebSocketMessage } = useWebSocket();
   const scrollRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
@@ -48,55 +53,41 @@ export default function MessageList({
     }
   }, [messages]);
 
-  // Set up channel message handler
+  // Set up WebSocket message handler
   useEffect(() => {
     if (!channelId) return;
 
-    console.log(`Setting up channel message handler for channel ${channelId}`);
-
     if (!cleanupRef.current) {
       const cleanup = addMessageHandler((msg) => {
-        try {
-          if (msg.type === "message" && msg.channelId === channelId) {
-            console.log("MessageList received channel message:", msg);
+        if (msg.type === "message" && msg.channelId === channelId) {
+          const newMessage = msg.newMessage as ChannelMessage;
+          if (!newMessage) return;
 
-            const newMessage = msg.newMessage as ChannelMessage;
-            if (!newMessage) {
-              console.log("No message data in WebSocket message");
-              return;
-            }
+          queryClient.setQueryData<ChannelMessage[]>(
+            [`/api/channels/${channelId}/messages`],
+            (oldMessages = []) => {
+              if (!oldMessages) return [newMessage];
 
-            queryClient.setQueryData<ChannelMessage[]>(
-              [`/api/channels/${channelId}/messages`],
-              (oldMessages = []) => {
-                if (!oldMessages) return [newMessage];
-
-                // Check if message already exists
-                const messageExists = oldMessages.some(
-                  (m) => m.id === newMessage.id,
+              // Update existing message or add new one
+              const messageExists = oldMessages.some((m) => m.id === newMessage.id);
+              if (messageExists) {
+                return oldMessages.map((m) =>
+                  m.id === newMessage.id ? { ...m, ...newMessage } : m,
                 );
-                if (messageExists) {
-                  return oldMessages.map((m) =>
-                    m.id === newMessage.id ? { ...m, ...newMessage } : m,
-                  );
-                }
+              }
 
-                // Only add message if it's not a thread reply
-                if (!newMessage.parentId) {
-                  const updatedMessages = [...oldMessages, newMessage];
-                  return updatedMessages.sort(
-                    (a, b) =>
-                      new Date(a.createdAt!).getTime() -
-                      new Date(b.createdAt!).getTime(),
-                  );
-                }
+              // Only add top-level messages
+              if (!newMessage.parentId) {
+                return [...oldMessages, newMessage].sort(
+                  (a, b) =>
+                    new Date(a.createdAt!).getTime() -
+                    new Date(b.createdAt!).getTime(),
+                );
+              }
 
-                return oldMessages;
-              },
-            );
-          }
-        } catch (error) {
-          console.error("Error handling channel message:", error);
+              return oldMessages;
+            },
+          );
         }
       }, `channel-${channelId}`);
 
@@ -105,7 +96,6 @@ export default function MessageList({
 
     return () => {
       if (cleanupRef.current) {
-        console.log(`Cleaning up channel message handler for channel ${channelId}`);
         cleanupRef.current();
         cleanupRef.current = null;
       }
@@ -113,19 +103,17 @@ export default function MessageList({
   }, [channelId, queryClient, addMessageHandler]);
 
   const handleSendMessage = async (content: string) => {
-    if (!channelId) return;
+    if (!channelId || !content.trim()) return;
 
     try {
       const newMessage = await sendMessage({ content });
-      console.log("Sending channel message:", newMessage);
-
       sendWebSocketMessage({
         type: "message",
         channelId,
         newMessage,
       });
     } catch (error) {
-      console.error("Error sending channel message:", error);
+      console.error("Error sending message:", error);
     }
   };
 
@@ -146,11 +134,11 @@ export default function MessageList({
   }
 
   // Filter out thread replies from the main channel view
-  const channelMessages = messages?.filter((msg) => !msg.parentId) || [];
+  const channelMessages = (messages as ChannelMessage[])?.filter((msg) => !msg.parentId) || [];
 
   // Calculate reply counts for each top-level message
   const replyCountMap: Record<number, number> = {};
-  messages?.forEach((msg) => {
+  messages?.forEach((msg: ChannelMessage) => {
     if (msg.parentId) {
       replyCountMap[msg.parentId] = (replyCountMap[msg.parentId] || 0) + 1;
     }
@@ -168,11 +156,9 @@ export default function MessageList({
             {channelMessages.map((message) => (
               <MessageItem
                 key={message.id}
-                message={message as ChannelMessage}
+                message={message}
                 onThreadSelect={onThreadSelect}
-                onReactionAdd={(emoji) =>
-                  addReaction({ messageId: message.id, emoji })
-                }
+                onReactionAdd={(emoji) => addReaction({ messageId: message.id, emoji })}
                 replyCount={replyCountMap[message.id] || 0}
               />
             ))}
@@ -208,13 +194,8 @@ function MessageItem({
   return (
     <div className="flex gap-3 group">
       <Avatar>
-        <AvatarImage
-          src={message.user.avatar || undefined}
-          alt={message.user.username}
-        />
-        <AvatarFallback>
-          {message.user.username[0].toUpperCase()}
-        </AvatarFallback>
+        <AvatarImage src={message.user.avatar || undefined} alt={message.user.username} />
+        <AvatarFallback>{message.user.username[0].toUpperCase()}</AvatarFallback>
       </Avatar>
 
       <div className="flex-1">
@@ -247,20 +228,11 @@ function MessageItem({
           <Button
             variant="ghost"
             size="sm"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              onThreadSelect(message.id);
-            }}
+            onClick={() => onThreadSelect(message.id)}
             className="flex items-center gap-1"
           >
             <MessageSquare className="h-4 w-4" />
-            Reply
-            {replyCount > 0 && (
-              <span className="ml-1 text-xs bg-secondary px-1.5 py-0.5 rounded-full">
-                {replyCount}
-              </span>
-            )}
+            Reply {replyCount > 0 && `(${replyCount})`}
           </Button>
 
           <Button variant="ghost" size="sm" onClick={() => onReactionAdd("👍")}>
