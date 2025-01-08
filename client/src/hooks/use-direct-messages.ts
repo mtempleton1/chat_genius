@@ -1,14 +1,15 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Message, User } from "@db/schema";
 
-type DirectMessage = Message & {
+type DirectMessageResponse = {
+  message: Message;
   user: User;
 };
 
 export function useDirectMessages(workspaceId: number, userId: number) {
   const queryClient = useQueryClient();
 
-  const { data: messages, isLoading } = useQuery<DirectMessage[]>({
+  const { data: messages, isLoading } = useQuery<DirectMessageResponse[]>({
     queryKey: [`/api/workspaces/${workspaceId}/direct-messages/${userId}`],
     enabled: !!workspaceId && !!userId,
   });

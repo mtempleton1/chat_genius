@@ -6,6 +6,8 @@ import { useDirectMessages } from "@/hooks/use-direct-messages";
 import { useUser } from "@/hooks/use-user";
 import FileUpload from "./FileUpload";
 import { Loader2 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import type { Message, User } from "@db/schema";
 
 type DirectMessageChatProps = {
   userId: number;
@@ -13,23 +15,50 @@ type DirectMessageChatProps = {
   workspaceId: number;
 };
 
+type DirectMessageResponse = {
+  message: Message;
+  user: User;
+};
+
 export default function DirectMessageChat({ userId, username, workspaceId }: DirectMessageChatProps) {
   const { messages, isLoading, sendMessage } = useDirectMessages(workspaceId, userId);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const { user: currentUser } = useUser();
+  const { toast } = useToast();
+  const shouldScrollRef = useRef(true);
 
   // Auto-scroll when new messages arrive
   useEffect(() => {
     const scrollElement = scrollRef.current;
-    if (scrollElement) {
+    if (scrollElement && shouldScrollRef.current) {
       scrollElement.scrollTop = scrollElement.scrollHeight;
     }
   }, [messages]);
 
+  // Handle scroll events to determine if we should auto-scroll
+  const handleScroll = () => {
+    const scrollElement = scrollRef.current;
+    if (scrollElement) {
+      const { scrollTop, scrollHeight, clientHeight } = scrollElement;
+      // If we're within 100px of the bottom, enable auto-scroll
+      shouldScrollRef.current = scrollHeight - (scrollTop + clientHeight) < 100;
+    }
+  };
+
   const handleSendMessage = async (content: string) => {
+    if (!content.trim()) return;
+
     try {
       await sendMessage(content);
+      // Enable auto-scroll when sending a new message
+      shouldScrollRef.current = true;
     } catch (error) {
       console.error("Error sending message:", error);
+      toast({
+        title: "Failed to send message",
+        description: "Please try again",
+        variant: "destructive",
+      });
     }
   };
 
@@ -44,7 +73,7 @@ export default function DirectMessageChat({ userId, username, workspaceId }: Dir
         <span className="font-medium">{username}</span>
       </div>
 
-      <ScrollArea className="flex-1" ref={scrollRef}>
+      <ScrollArea className="flex-1" ref={scrollRef} onScrollCapture={handleScroll}>
         <div className="p-4 space-y-4">
           {isLoading ? (
             <div className="flex items-center justify-center h-full">
@@ -55,24 +84,54 @@ export default function DirectMessageChat({ userId, username, workspaceId }: Dir
               No messages yet. Start a conversation!
             </div>
           ) : (
-            messages.map((message) => (
-              <div key={message.id} className="flex gap-2">
-                <Avatar className="h-8 w-8">
-                  <div className="w-full h-full flex items-center justify-center bg-primary text-primary-foreground text-xs uppercase">
-                    {message.user.username[0]}
+            <div className="space-y-4">
+              {messages.map((msg: DirectMessageResponse) => (
+                <div 
+                  key={msg.message.id} 
+                  className={`flex gap-2 ${
+                    msg.message.userId === currentUser?.id ? 'justify-end' : 'justify-start'
+                  }`}
+                >
+                  {msg.message.userId !== currentUser?.id && (
+                    <Avatar className="h-8 w-8">
+                      <div className="w-full h-full flex items-center justify-center bg-primary text-primary-foreground text-xs uppercase">
+                        {msg.user.username[0]}
+                      </div>
+                    </Avatar>
+                  )}
+                  <div className={`max-w-[70%] ${
+                    msg.message.userId === currentUser?.id 
+                      ? 'bg-primary text-primary-foreground' 
+                      : 'bg-secondary'
+                  } rounded-lg p-3`}>
+                    <div className="flex items-baseline gap-2">
+                      <span className="font-semibold text-sm">
+                        {msg.user.username}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {new Date(msg.message.createdAt!).toLocaleString()}
+                      </span>
+                    </div>
+                    <p className="mt-1">{msg.message.content}</p>
+                    {msg.message.attachments && msg.message.attachments.length > 0 && (
+                      <div className="mt-2 flex gap-2">
+                        {msg.message.attachments.map((attachment, index) => (
+                          <a
+                            key={index}
+                            href={attachment.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm text-blue-500 hover:underline"
+                          >
+                            {attachment.name}
+                          </a>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                </Avatar>
-                <div>
-                  <div className="flex items-baseline gap-2">
-                    <span className="font-semibold">{message.user.username}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {new Date(message.createdAt!).toLocaleString()}
-                    </span>
-                  </div>
-                  <p className="mt-1">{message.content}</p>
                 </div>
-              </div>
-            ))
+              ))}
+            </div>
           )}
         </div>
       </ScrollArea>
