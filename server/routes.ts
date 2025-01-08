@@ -425,7 +425,15 @@ export function registerRoutes(app: Express): Server {
       // Fetch the created message with user details
       const [messageWithUser] = await db
         .select({
-          message: messages,
+          id: messages.id,
+          content: messages.content,
+          userId: messages.userId,
+          channelId: messages.channelId,
+          directMessageId: messages.directMessageId,
+          parentId: messages.parentId,
+          attachments: messages.attachments,
+          createdAt: messages.createdAt,
+          updatedAt: messages.updatedAt,
           user: users,
         })
         .from(messages)
