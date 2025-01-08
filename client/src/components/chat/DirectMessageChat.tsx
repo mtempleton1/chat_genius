@@ -102,7 +102,7 @@ export default function DirectMessageChat({
               {messages.map((msg: DirectMessageResponse) => (
                 <div
                   key={msg.message.id}
-                  className={`flex gap-2 ${
+                  className={`flex gap-2 group ${
                     msg.message.userId === currentUser?.id
                       ? "justify-end"
                       : "justify-start"
