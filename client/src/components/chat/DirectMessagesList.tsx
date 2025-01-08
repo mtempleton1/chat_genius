@@ -22,7 +22,10 @@ export default function DirectMessagesList({
   const { data: users, isLoading, error } = useQuery<WorkspaceUser[]>({
     queryKey: [`/api/workspaces/${workspaceId}/users`],
     enabled: !!workspaceId && workspaceId > 0,
-    retry: false
+    retry: false,
+    onError: (error) => {
+      console.error("DirectMessagesList error:", error);
+    }
   });
 
   const displayedUsers = users || [];

@@ -43,9 +43,15 @@ export function registerRoutes(app: Express): Server {
   // Setup WebSocket after creating HTTP server but before registering routes
   setupWebSocket(httpServer);
 
+  // Middleware to ensure Content-Type is set for API responses
+  app.use('/api', (req, res, next) => {
+    res.type('application/json');
+    next();
+  });
+
   app.get("/api/user/workspaces", async (req, res) => {
     const user = req.user;
-    if (!user) return res.status(401).send("Not authenticated");
+    if (!user) return res.status(401).json({ error: "Not authenticated" });
 
     try {
       const userWorkspaces = await db
@@ -65,14 +71,14 @@ export function registerRoutes(app: Express): Server {
       res.json(userWorkspaces);
     } catch (error) {
       console.error("Error fetching user workspaces:", error);
-      res.status(500).send("Internal server error");
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
   app.get("/api/workspaces/:workspaceId", async (req, res) => {
     const workspaceId = parseInt(req.params.workspaceId);
     if (isNaN(workspaceId)) {
-      return res.status(400).send("Invalid workspace ID");
+      return res.status(400).json({ error: "Invalid workspace ID" });
     }
 
     try {
@@ -90,7 +96,7 @@ export function registerRoutes(app: Express): Server {
         .limit(1);
 
       if (!workspaceResult) {
-        return res.status(404).send("Workspace not found");
+        return res.status(404).json({ error: "Workspace not found" });
       }
 
       // If user is authenticated, check membership
@@ -134,18 +140,18 @@ export function registerRoutes(app: Express): Server {
       return res.json(publicWorkspaceData);
     } catch (error) {
       console.error("Error fetching workspace:", error);
-      return res.status(500).send("Internal server error");
+      return res.status(500).json({ error: "Internal server error" });
     }
   });
 
   app.get("/api/workspaces/:workspaceId/channels", async (req, res) => {
     try {
       const user = req.user;
-      if (!user) return res.status(401).send("Not authenticated");
+      if (!user) return res.status(401).json({ error: "Not authenticated" });
 
       const workspaceId = parseInt(req.params.workspaceId);
       if (isNaN(workspaceId)) {
-        return res.status(400).send("Invalid workspace ID");
+        return res.status(400).json({ error: "Invalid workspace ID" });
       }
 
       // Check workspace membership
@@ -161,7 +167,7 @@ export function registerRoutes(app: Express): Server {
         .limit(1);
 
       if (!member) {
-        return res.status(403).send("Not a member of this workspace");
+        return res.status(403).json({ error: "Not a member of this workspace" });
       }
 
       const workspaceChannels = await db
@@ -172,18 +178,20 @@ export function registerRoutes(app: Express): Server {
       res.json(workspaceChannels);
     } catch (error) {
       console.error("Error fetching workspace channels:", error);
-      res.status(500).send("Internal server error");
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
   app.get("/api/workspaces/:workspaceId/users", async (req, res) => {
     try {
       const user = req.user;
-      if (!user) return res.status(401).send("Not authenticated");
+      if (!user) {
+        return res.status(401).json({ error: "Not authenticated" });
+      }
 
       const workspaceId = parseInt(req.params.workspaceId);
       if (isNaN(workspaceId)) {
-        return res.status(400).send("Invalid workspace ID");
+        return res.status(400).json({ error: "Invalid workspace ID" });
       }
 
       // Check workspace membership using proper typing
@@ -199,7 +207,7 @@ export function registerRoutes(app: Express): Server {
         .limit(1);
 
       if (!member) {
-        return res.status(403).send("Not a member of this workspace");
+        return res.status(403).json({ error: "Not a member of this workspace" });
       }
 
       // Get all workspace users with proper typing
@@ -215,17 +223,17 @@ export function registerRoutes(app: Express): Server {
       res.json(workspaceUsers);
     } catch (error) {
       console.error("Error fetching workspace users:", error);
-      res.status(500).send("Internal server error");
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
   app.post("/api/workspaces/:workspaceId/channels", async (req, res) => {
     const user = req.user;
-    if (!user) return res.status(401).send("Not authenticated");
+    if (!user) return res.status(401).json({ error: "Not authenticated" });
 
     const workspaceId = parseInt(req.params.workspaceId);
     if (isNaN(workspaceId)) {
-      return res.status(400).send("Invalid workspace ID");
+      return res.status(400).json({ error: "Invalid workspace ID" });
     }
 
     const { name, isPrivate } = req.body;
@@ -243,7 +251,7 @@ export function registerRoutes(app: Express): Server {
       .limit(1);
 
     if (!member) {
-      return res.status(403).send("Not a member of this workspace");
+      return res.status(403).json({ error: "Not a member of this workspace" });
     }
 
     const [channel] = await db
@@ -278,10 +286,10 @@ export function registerRoutes(app: Express): Server {
 
   app.get("/api/channels/:channelId/messages", async (req, res) => {
     const user = req.user;
-    if (!user) return res.status(401).send("Not authenticated");
+    if (!user) return res.status(401).json({ error: "Not authenticated" });
     const channelId = parseInt(req.params.channelId);
     if (isNaN(channelId)) {
-      return res.status(400).send("Invalid channel ID");
+      return res.status(400).json({ error: "Invalid channel ID" });
     }
 
     try {
@@ -299,7 +307,7 @@ export function registerRoutes(app: Express): Server {
         .limit(1);
 
       if (!channel || !channel.workspace) {
-        return res.status(404).send("Channel not found");
+        return res.status(404).json({ error: "Channel not found" });
       }
 
       // Verify workspace membership
@@ -315,7 +323,7 @@ export function registerRoutes(app: Express): Server {
         .limit(1);
 
       if (!workspaceMember) {
-        return res.status(403).send("Not a member of this workspace");
+        return res.status(403).json({ error: "Not a member of this workspace" });
       }
 
       // Get only root messages (not thread replies)
@@ -356,17 +364,17 @@ export function registerRoutes(app: Express): Server {
       res.json(messagesWithDetails);
     } catch (error) {
       console.error("Error fetching messages:", error);
-      res.status(500).send("Internal server error");
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
   app.get("/api/messages/:messageId/thread", async (req, res) => {
     const user = req.user;
-    if (!user) return res.status(401).send("Not authenticated");
+    if (!user) return res.status(401).json({ error: "Not authenticated" });
 
     const messageId = parseInt(req.params.messageId);
     if (isNaN(messageId)) {
-      return res.status(400).send("Invalid message ID");
+      return res.status(400).json({ error: "Invalid message ID" });
     }
 
     try {
@@ -384,7 +392,7 @@ export function registerRoutes(app: Express): Server {
         .limit(1);
 
       if (!message || !message.workspace) {
-        return res.status(404).send("Message or workspace not found");
+        return res.status(404).json({ error: "Message or workspace not found" });
       }
 
       // Verify workspace membership with proper typing
@@ -400,7 +408,7 @@ export function registerRoutes(app: Express): Server {
         .limit(1);
 
       if (!workspaceMember) {
-        return res.status(403).send("Not a member of this workspace");
+        return res.status(403).json({ error: "Not a member of this workspace" });
       }
 
       // Get the thread messages
@@ -413,15 +421,15 @@ export function registerRoutes(app: Express): Server {
       res.json(threadMessages);
     } catch (error) {
       console.error("Error fetching thread:", error);
-      res.status(500).send("Internal server error");
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
   // Add file upload endpoint
   app.post("/api/upload", upload.single("file"), async (req, res) => {
     const user = req.user;
-    if (!user) return res.status(401).send("Not authenticated");
-    if (!req.file) return res.status(400).send("No file uploaded");
+    if (!user) return res.status(401).json({ error: "Not authenticated" });
+    if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
     const fileUrl = `/uploads/${req.file.filename}`;
     res.json({ url: fileUrl, name: req.file.originalname });
