@@ -80,7 +80,6 @@ export function useWebSocket() {
           ...persistentHandlersRef.current,
           ...temporaryHandlersRef.current,
         ];
-        console.log(allHandlers);
         allHandlers.forEach(({ handler, scope }) => {
           try {
             // Channel messages should be handled by channel handlers
@@ -261,7 +260,6 @@ export function useWebSocket() {
         );
         temporaryHandlersRef.current.push(newHandler);
       }
-      console.log("Persistent handlers:", persistentHandlersRef);
 
       // Log current handlers for debugging
       console.log("Current handlers:", {
@@ -278,9 +276,11 @@ export function useWebSocket() {
       // Return cleanup function
       return () => {
         if (!isPersistent) {
-          console.log(`Removing temporary handler (${handlerId}) for scope: ${scope}`);
+          console.log(
+            `Removing temporary handler (${handlerId}) for scope: ${scope}`,
+          );
           temporaryHandlersRef.current = temporaryHandlersRef.current.filter(
-            (h) => h.id !== handlerId
+            (h) => h.id !== handlerId,
           );
         }
       };

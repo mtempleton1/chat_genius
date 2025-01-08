@@ -24,24 +24,28 @@ type WorkspaceSelectorProps = {
   onSelect: (workspaceId: number) => void;
 };
 
-export default function WorkspaceSelector({ onSelect }: WorkspaceSelectorProps) {
+export default function WorkspaceSelector({
+  onSelect,
+}: WorkspaceSelectorProps) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const { data: workspaces, isLoading, error } = useQuery<Workspace[]>({
-    queryKey: ['/api/user/workspaces'],
+  const {
+    data: workspaces,
+    isLoading,
+    error,
+  } = useQuery<Workspace[]>({
+    queryKey: ["/api/user/workspaces"],
   });
 
   // Add mutation for setting workspace
   const setWorkspace = useMutation({
     mutationFn: async (workspaceId: number) => {
-      console.log('Setting workspace:', workspaceId);
-      const response = await fetch('/api/user/workspace', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetch("/api/user/workspace", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ workspaceId }),
-        credentials: 'include',
+        credentials: "include",
       });
-      console.log('Response:', response);
 
       if (!response.ok) {
         throw new Error(await response.text());
@@ -49,7 +53,7 @@ export default function WorkspaceSelector({ onSelect }: WorkspaceSelectorProps) 
       return response.json();
     },
     onSuccess: (data) => {
-      queryClient.setQueryData(['user'], (old: any) => ({
+      queryClient.setQueryData(["user"], (old: any) => ({
         ...old,
         workspaceId: data.user.workspaceId,
       }));
@@ -57,11 +61,11 @@ export default function WorkspaceSelector({ onSelect }: WorkspaceSelectorProps) 
       onSelect(data.user.workspaceId);
     },
     onError: (error) => {
-      console.error('Error switching workspace:', error);
+      console.error("Error switching workspace:", error);
       toast({
-        title: 'Error',
-        description: error.message || 'Failed to switch workspace',
-        variant: 'destructive',
+        title: "Error",
+        description: error.message || "Failed to switch workspace",
+        variant: "destructive",
       });
     },
   });
@@ -89,8 +93,8 @@ export default function WorkspaceSelector({ onSelect }: WorkspaceSelectorProps) 
     return (
       <div className="text-destructive flex items-center gap-2">
         <span>Failed to load workspaces</span>
-        <button 
-          onClick={() => window.location.reload()} 
+        <button
+          onClick={() => window.location.reload()}
           className="text-sm underline hover:text-destructive/90"
         >
           Retry
@@ -110,8 +114,8 @@ export default function WorkspaceSelector({ onSelect }: WorkspaceSelectorProps) 
       </SelectTrigger>
       <SelectContent>
         {workspaces.map((workspace) => (
-          <SelectItem 
-            key={workspace.id} 
+          <SelectItem
+            key={workspace.id}
             value={workspace.id.toString()}
             className="flex items-center justify-between"
           >

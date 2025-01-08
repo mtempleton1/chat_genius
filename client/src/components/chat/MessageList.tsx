@@ -64,8 +64,6 @@ export default function MessageList({
               console.log("No message data in WebSocket message");
               return;
             }
-            console.log("MESSSSSSSSSSSSSSGAGEGEG");
-            console.log(newMessage);
             queryClient.setQueryData<ChannelMessage[]>(
               [`/api/channels/${channelId}/messages`],
               (oldMessages = []) => {
