@@ -31,8 +31,10 @@ export default function UserPresence({ user }: UserPresenceProps) {
       <DropdownMenuTrigger className="focus:outline-none">
         <div className="flex items-center gap-2">
           <Avatar>
-            {user.avatar && <AvatarImage src={user.avatar} alt={user.username} />}
-            <AvatarFallback>{user.username[0].toUpperCase()}</AvatarFallback>
+            <AvatarImage src={user.avatar || ''} alt={user.username} />
+            <AvatarFallback>
+              <User className="h-6 w-6" />
+            </AvatarFallback>
           </Avatar>
           <div className="text-sm">
             <div className="font-medium">{user.username}</div>
