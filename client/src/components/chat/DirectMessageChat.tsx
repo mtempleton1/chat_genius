@@ -1,14 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
 import MessageInput from "./MessageInput";
 import { useDirectMessages } from "@/hooks/use-direct-messages";
 import { useUser } from "@/hooks/use-user";
 import FileUpload from "./FileUpload";
-import { Loader2, MessageSquare } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import ThreadView from "./ThreadView";
 import type { Message, User } from "@db/schema";
 
 type DirectMessageChatProps = {
@@ -18,9 +16,7 @@ type DirectMessageChatProps = {
 };
 
 type DirectMessageResponse = {
-  message: Message & {
-    replyCount: number;
-  };
+  message: Message;
   user: User;
 };
 
@@ -30,7 +26,6 @@ export default function DirectMessageChat({ userId, username, workspaceId }: Dir
   const { user: currentUser } = useUser();
   const { toast } = useToast();
   const shouldScrollRef = useRef(true);
-  const [selectedThreadId, setSelectedThreadId] = useState<number | null>(null);
 
   // Auto-scroll when new messages arrive
   useEffect(() => {
@@ -68,106 +63,85 @@ export default function DirectMessageChat({ userId, username, workspaceId }: Dir
   };
 
   return (
-    <div className="h-full flex">
-      <div className={`h-full flex flex-col ${selectedThreadId ? 'flex-1' : 'w-full'}`}>
-        <div className="border-b px-4 py-2 flex items-center space-x-2">
-          <Avatar className="h-6 w-6">
-            <div className="w-full h-full flex items-center justify-center bg-primary text-primary-foreground text-xs uppercase">
-              {username[0]}
-            </div>
-          </Avatar>
-          <span className="font-medium">{username}</span>
-        </div>
-
-        <ScrollArea className="flex-1" ref={scrollRef} onScrollCapture={handleScroll}>
-          <div className="p-4 space-y-4">
-            {isLoading ? (
-              <div className="flex items-center justify-center h-full">
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-              </div>
-            ) : messages.length === 0 ? (
-              <div className="flex items-center justify-center h-full text-muted-foreground">
-                No messages yet. Start a conversation!
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {messages.map((msg: DirectMessageResponse) => (
-                  <div 
-                    key={msg.message.id} 
-                    className={`flex gap-2 ${
-                      msg.message.userId === currentUser?.id ? 'justify-end' : 'justify-start'
-                    }`}
-                  >
-                    {msg.message.userId !== currentUser?.id && (
-                      <Avatar className="h-8 w-8">
-                        <div className="w-full h-full flex items-center justify-center bg-primary text-primary-foreground text-xs uppercase">
-                          {msg.user.username[0]}
-                        </div>
-                      </Avatar>
-                    )}
-                    <div>
-                      <div className={`max-w-[70%] ${
-                        msg.message.userId === currentUser?.id 
-                          ? 'bg-primary text-primary-foreground' 
-                          : 'bg-secondary'
-                      } rounded-lg p-3`}>
-                        <div className="flex items-baseline gap-2">
-                          <span className="font-semibold text-sm">
-                            {msg.user.username}
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            {new Date(msg.message.createdAt!).toLocaleString()}
-                          </span>
-                        </div>
-                        <p className="mt-1">{msg.message.content}</p>
-                        {msg.message.attachments && msg.message.attachments.length > 0 && (
-                          <div className="mt-2 flex gap-2">
-                            {msg.message.attachments.map((attachment, index) => (
-                              <a
-                                key={index}
-                                href={attachment.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-sm text-blue-500 hover:underline"
-                              >
-                                {attachment.name}
-                              </a>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                      {/* Thread button */}
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        className="mt-1"
-                        onClick={() => setSelectedThreadId(msg.message.id)}
-                      >
-                        <MessageSquare className="h-4 w-4 mr-1" />
-                        {msg.message.replyCount} replies
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+    <div className="h-full flex flex-col">
+      <div className="border-b px-4 py-2 flex items-center space-x-2">
+        <Avatar className="h-6 w-6">
+          <div className="w-full h-full flex items-center justify-center bg-primary text-primary-foreground text-xs uppercase">
+            {username[0]}
           </div>
-        </ScrollArea>
-
-        <div className="p-4 border-t">
-          <MessageInput
-            onSendMessage={handleSendMessage}
-            fileUploadComponent={<FileUpload channelId={0} />}
-          />
-        </div>
+        </Avatar>
+        <span className="font-medium">{username}</span>
       </div>
 
-      {selectedThreadId && (
-        <ThreadView
-          messageId={selectedThreadId}
-          onClose={() => setSelectedThreadId(null)}
+      <ScrollArea className="flex-1" ref={scrollRef} onScrollCapture={handleScroll}>
+        <div className="p-4 space-y-4">
+          {isLoading ? (
+            <div className="flex items-center justify-center h-full">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : messages.length === 0 ? (
+            <div className="flex items-center justify-center h-full text-muted-foreground">
+              No messages yet. Start a conversation!
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {messages.map((msg: DirectMessageResponse) => (
+                <div 
+                  key={msg.message.id} 
+                  className={`flex gap-2 ${
+                    msg.message.userId === currentUser?.id ? 'justify-end' : 'justify-start'
+                  }`}
+                >
+                  {msg.message.userId !== currentUser?.id && (
+                    <Avatar className="h-8 w-8">
+                      <div className="w-full h-full flex items-center justify-center bg-primary text-primary-foreground text-xs uppercase">
+                        {msg.user.username[0]}
+                      </div>
+                    </Avatar>
+                  )}
+                  <div className={`max-w-[70%] ${
+                    msg.message.userId === currentUser?.id 
+                      ? 'bg-primary text-primary-foreground' 
+                      : 'bg-secondary'
+                  } rounded-lg p-3`}>
+                    <div className="flex items-baseline gap-2">
+                      <span className="font-semibold text-sm">
+                        {msg.user.username}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {new Date(msg.message.createdAt!).toLocaleString()}
+                      </span>
+                    </div>
+                    <p className="mt-1">{msg.message.content}</p>
+                    {msg.message.attachments && msg.message.attachments.length > 0 && (
+                      <div className="mt-2 flex gap-2">
+                        {msg.message.attachments.map((attachment, index) => (
+                          <a
+                            key={index}
+                            href={attachment.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm text-blue-500 hover:underline"
+                          >
+                            {attachment.name}
+                          </a>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </ScrollArea>
+
+      <div className="p-4 border-t">
+        <MessageInput
+          onSendMessage={handleSendMessage}
+          fileUploadComponent={<FileUpload channelId={0} />}
         />
-      )}
+      </div>
     </div>
   );
 }

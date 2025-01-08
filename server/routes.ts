@@ -13,7 +13,7 @@ import {
   users,
   directMessages,
 } from "@db/schema";
-import { eq, and, asc, desc, isNull, sql } from "drizzle-orm";
+import { eq, and, asc, or, desc, isNull } from "drizzle-orm";
 import multer from "multer";
 import type { InferModel } from "drizzle-orm";
 
@@ -557,39 +557,23 @@ export function registerRoutes(app: Express): Server {
         conversation = inserted[0];
       }
 
-      // Get messages and their reply counts
-      const messageResults = await Promise.all((
-        await db
-          .select({
-            message: messages,
-            user: users,
-          })
-          .from(messages)
-          .where(
-            and(
-              eq(messages.directMessageId, conversation.id),
-              parentId
-                ? eq(messages.parentId, parseInt(parentId as string))
-                : isNull(messages.parentId),
-            ),
-          )
-          .leftJoin(users, eq(messages.userId, users.id))
-          .orderBy(asc(messages.createdAt))
-      ).map(async (result) => {
-        // Get reply count for each message
-        const [{ count }] = await db
-          .select({ count: sql`count(*)::int` })
-          .from(messages)
-          .where(eq(messages.parentId, result.message.id));
-
-        return {
-          ...result,
-          message: {
-            ...result.message,
-            replyCount: count || 0,
-          },
-        };
-      }));
+      // Get messages for this direct message conversation
+      const messageResults = await db
+        .select({
+          message: messages,
+          user: users,
+        })
+        .from(messages)
+        .where(
+          and(
+            eq(messages.directMessageId, conversation.id),
+            parentId
+              ? eq(messages.parentId, parseInt(parentId as string))
+              : isNull(messages.parentId),
+          ),
+        )
+        .leftJoin(users, eq(messages.userId, users.id))
+        .orderBy(asc(messages.createdAt));
 
       res.json(messageResults);
     } catch (error) {
