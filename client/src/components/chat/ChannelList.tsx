@@ -93,9 +93,9 @@ export default function ChannelList({
   };
 
   return (
-    <div className="h-full flex flex-col p-4 border-r">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="font-semibold">Channels</h2>
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <h2 className="font-semibold text-sm">Channels</h2>
         <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
           <DialogTrigger asChild>
             <Button variant="ghost" size="icon">
@@ -122,29 +122,26 @@ export default function ChannelList({
           </DialogContent>
         </Dialog>
       </div>
-
-      <ScrollArea className="flex-1 -mx-4">
-        <div className="px-4 space-y-1">
-          {channels?.map((channel) => (
-            <button
-              key={channel.id}
-              onClick={() => onSelectChannel(channel.id)}
-              className={cn(
-                "w-full flex items-center space-x-2 px-2 py-1.5 rounded-md text-sm",
-                "hover:bg-accent hover:text-accent-foreground",
-                selectedChannelId === channel.id && "bg-accent text-accent-foreground"
-              )}
-            >
-              {channel.isPrivate ? (
-                <Lock className="h-4 w-4" />
-              ) : (
-                <Hash className="h-4 w-4" />
-              )}
-              <span>{channel.name}</span>
-            </button>
-          ))}
-        </div>
-      </ScrollArea>
+      <div className="space-y-1">
+        {channels?.map((channel) => (
+          <button
+            key={channel.id}
+            onClick={() => onSelectChannel(channel.id)}
+            className={cn(
+              "w-full flex items-center space-x-2 px-2 py-1.5 rounded-md text-sm",
+              "hover:bg-accent hover:text-accent-foreground",
+              selectedChannelId === channel.id && "bg-accent text-accent-foreground"
+            )}
+          >
+            {channel.isPrivate ? (
+              <Lock className="h-4 w-4" />
+            ) : (
+              <Hash className="h-4 w-4" />
+            )}
+            <span>{channel.name}</span>
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
