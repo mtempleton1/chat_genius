@@ -48,7 +48,7 @@ export default function ChatPage() {
   // Get workspace ID from URL if it exists
   const workspaceId = location.startsWith('/workspace/') 
     ? parseInt(location.split('/')[2], 10) 
-    : undefined;
+    : null;
 
   const { data: workspace, isLoading: isLoadingWorkspace } = useQuery<Workspace>({
     queryKey: [`/api/workspaces/${workspaceId}`],
@@ -62,7 +62,7 @@ export default function ChatPage() {
   });
 
   // Query for workspace users
-  const { data: users } = useQuery<{ username: string; id: number }[]>({
+  const { data: users, isLoading: isLoadingUsers } = useQuery<{ username: string; id: number }[]>({
     queryKey: [`/api/workspaces/${workspaceId}/users`],
     enabled: !!workspaceId,
   });
@@ -101,13 +101,19 @@ export default function ChatPage() {
           ) : (
             <WorkspaceSelector onSelect={handleWorkspaceSelect} />
           )}
-          <UserPresence 
-            user={{
-              id: user.id,
-              username: user.username,
-              status: 'online'
-            }} 
-          />
+          {user && (
+            <UserPresence 
+              user={{
+                id: user.id,
+                username: user.username,
+                status: 'online',
+                avatar: null,
+                lastSeen: null,
+                createdAt: null,
+                password: ''
+              }}
+            />
+          )}
         </div>
       </header>
 
