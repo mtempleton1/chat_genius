@@ -16,6 +16,13 @@ import { eq, and, asc, or, desc, isNull } from "drizzle-orm";
 import multer from "multer";
 import type { InferModel } from "drizzle-orm";
 
+// Define some type helpers for our database models
+type User = InferModel<typeof users>;
+type Workspace = InferModel<typeof workspaces>;
+type WorkspaceMember = InferModel<typeof workspaceMembers>;
+type Message = InferModel<typeof messages>;
+type Channel = InferModel<typeof channels>;
+
 // Configure multer for file uploads
 const upload = multer({
   storage: multer.diskStorage({
@@ -36,31 +43,6 @@ export function registerRoutes(app: Express): Server {
   // Setup WebSocket after creating HTTP server but before registering routes
   setupWebSocket(httpServer);
 
-  // Add status update endpoint
-  app.post("/api/user/status", async (req, res) => {
-    const user = req.user;
-    if (!user) return res.status(401).send("Not authenticated");
-
-    const { status } = req.body;
-    if (typeof status !== "string") {
-      return res.status(400).send("Status must be a string");
-    }
-
-    try {
-      const [updatedUser] = await db
-        .update(users)
-        .set({ status, lastSeen: new Date() })
-        .where(eq(users.id, user.id))
-        .returning();
-
-      res.json(updatedUser);
-    } catch (error) {
-      console.error("Error updating user status:", error);
-      res.status(500).send("Internal server error");
-    }
-  });
-
-  // Add endpoint to get user's workspaces
   app.get("/api/user/workspaces", async (req, res) => {
     const user = req.user;
     if (!user) return res.status(401).send("Not authenticated");
@@ -103,10 +85,7 @@ export function registerRoutes(app: Express): Server {
           organization: organizations,
         })
         .from(workspaces)
-        .leftJoin(
-          organizations,
-          eq(workspaces.organizationId, organizations.id),
-        )
+        .leftJoin(organizations, eq(workspaces.organizationId, organizations.id))
         .where(eq(workspaces.id, workspaceId))
         .limit(1);
 
@@ -170,31 +149,72 @@ export function registerRoutes(app: Express): Server {
       }
 
       // Check workspace membership
-      const member = await db.query.workspaceMembers.findFirst({
-        where: and(
-          eq(workspaceMembers.workspaceId, workspaceId),
-          eq(workspaceMembers.userId, user.id),
-        ),
-      });
+      const [member] = await db
+        .select()
+        .from(workspaceMembers)
+        .where(
+          and(
+            eq(workspaceMembers.workspaceId, workspaceId),
+            eq(workspaceMembers.userId, user.id),
+          ),
+        )
+        .limit(1);
 
       if (!member) {
         return res.status(403).send("Not a member of this workspace");
       }
 
-      const workspaceChannels = await db.query.channels.findMany({
-        where: eq(channels.workspaceId, workspaceId),
-        with: {
-          members: true,
-        },
-      });
-
-      if (!workspaceChannels) {
-        return res.status(404).send("No channels found");
-      }
+      const workspaceChannels = await db
+        .select()
+        .from(channels)
+        .where(eq(channels.workspaceId, workspaceId));
 
       res.json(workspaceChannels);
     } catch (error) {
       console.error("Error fetching workspace channels:", error);
+      res.status(500).send("Internal server error");
+    }
+  });
+
+  app.get("/api/workspaces/:workspaceId/users", async (req, res) => {
+    try {
+      const user = req.user;
+      if (!user) return res.status(401).send("Not authenticated");
+
+      const workspaceId = parseInt(req.params.workspaceId);
+      if (isNaN(workspaceId)) {
+        return res.status(400).send("Invalid workspace ID");
+      }
+
+      // Check workspace membership using proper typing
+      const [member] = await db
+        .select()
+        .from(workspaceMembers)
+        .where(
+          and(
+            eq(workspaceMembers.workspaceId, workspaceId),
+            eq(workspaceMembers.userId, user.id),
+          ),
+        )
+        .limit(1);
+
+      if (!member) {
+        return res.status(403).send("Not a member of this workspace");
+      }
+
+      // Get all workspace users with proper typing
+      const workspaceUsers = await db
+        .select({
+          id: users.id,
+          username: users.username,
+        })
+        .from(workspaceMembers)
+        .where(eq(workspaceMembers.workspaceId, workspaceId))
+        .innerJoin(users, eq(workspaceMembers.userId, users.id));
+
+      res.json(workspaceUsers);
+    } catch (error) {
+      console.error("Error fetching workspace users:", error);
       res.status(500).send("Internal server error");
     }
   });
@@ -211,12 +231,16 @@ export function registerRoutes(app: Express): Server {
     const { name, isPrivate } = req.body;
 
     // Check workspace membership
-    const member = await db.query.workspaceMembers.findFirst({
-      where: and(
-        eq(workspaceMembers.workspaceId, workspaceId),
-        eq(workspaceMembers.userId, user.id),
-      ),
-    });
+    const [member] = await db
+      .select()
+      .from(workspaceMembers)
+      .where(
+        and(
+          eq(workspaceMembers.workspaceId, workspaceId),
+          eq(workspaceMembers.userId, user.id),
+        ),
+      )
+      .limit(1);
 
     if (!member) {
       return res.status(403).send("Not a member of this workspace");
@@ -242,10 +266,10 @@ export function registerRoutes(app: Express): Server {
     // Add all workspace members to the channel
     if (members.length > 0) {
       await db.insert(channelMembers).values(
-        members.map(member => ({
+        members.map((member) => ({
           channelId: channel.id,
           userId: member.userId,
-        }))
+        })),
       );
     }
 
@@ -253,8 +277,6 @@ export function registerRoutes(app: Express): Server {
   });
 
   app.get("/api/channels/:channelId/messages", async (req, res) => {
-    console.log("ARE WE GETTTING HERERERERERERERE???????");
-
     const user = req.user;
     if (!user) return res.status(401).send("Not authenticated");
     const channelId = parseInt(req.params.channelId);
@@ -338,62 +360,6 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Add file upload endpoint
-  app.post("/api/upload", upload.single("file"), async (req, res) => {
-    const user = req.user;
-    if (!user) return res.status(401).send("Not authenticated");
-    if (!req.file) return res.status(400).send("No file uploaded");
-
-    const fileUrl = `/uploads/${req.file.filename}`;
-    res.json({ url: fileUrl, name: req.file.originalname });
-  });
-
-  app.post("/api/organizations", async (req, res) => {
-    const user = req.user;
-    if (!user) return res.status(401).send("Not authenticated");
-
-    const { name, domain } = req.body;
-    const [organization] = await db
-      .insert(organizations)
-      .values({ name, domain })
-      .returning();
-
-    // Create default workspace
-    const [workspace] = await db
-      .insert(workspaces)
-      .values({ name: "General", organizationId: organization.id })
-      .returning();
-
-    // Add creator as workspace member with owner role
-    await db.insert(workspaceMembers).values({
-      userId: user.id,
-      workspaceId: workspace.id,
-      role: "owner",
-    });
-
-    res.json({ organization, workspace });
-  });
-
-  app.post("/api/workspaces", async (req, res) => {
-    const user = req.user;
-    if (!user) return res.status(401).send("Not authenticated");
-
-    const { name, organizationId } = req.body;
-    const [workspace] = await db
-      .insert(workspaces)
-      .values({ name, organizationId })
-      .returning();
-
-    // Add creator as workspace member with owner role
-    await db.insert(workspaceMembers).values({
-      userId: user.id,
-      workspaceId: workspace.id,
-      role: "owner",
-    });
-
-    res.json(workspace);
-  });
-
   app.get("/api/messages/:messageId/thread", async (req, res) => {
     const user = req.user;
     if (!user) return res.status(401).send("Not authenticated");
@@ -404,8 +370,8 @@ export function registerRoutes(app: Express): Server {
     }
 
     try {
-      // First get the parent message and its channel
-      const message = await db
+      // First get the parent message and its channel with proper typing
+      const [message] = await db
         .select({
           message: messages,
           channel: channels,
@@ -417,19 +383,17 @@ export function registerRoutes(app: Express): Server {
         .where(eq(messages.id, messageId))
         .limit(1);
 
-      if (!message || !message[0]) {
-        return res.status(404).send("Message not found");
+      if (!message || !message.workspace) {
+        return res.status(404).send("Message or workspace not found");
       }
 
-      const { workspace } = message[0];
-
-      // Verify workspace membership.  This is where the null check needs to be added.
+      // Verify workspace membership with proper typing
       const [workspaceMember] = await db
         .select()
         .from(workspaceMembers)
         .where(
           and(
-            eq(workspaceMembers.workspaceId, workspace?.id),
+            eq(workspaceMembers.workspaceId, message.workspace.id),
             eq(workspaceMembers.userId, user.id),
           ),
         )
@@ -439,240 +403,28 @@ export function registerRoutes(app: Express): Server {
         return res.status(403).send("Not a member of this workspace");
       }
 
-      // Get the parent message with full details
-      const parentMessage = await db.query.messages.findFirst({
-        where: eq(messages.id, messageId),
-        with: {
-          user: true,
-          reactions: {
-            with: {
-              user: true,
-            },
-          },
-        },
-      });
+      // Get the thread messages
+      const threadMessages = await db
+        .select()
+        .from(messages)
+        .where(eq(messages.parentId, messageId))
+        .orderBy(asc(messages.createdAt));
 
-      if (!parentMessage) {
-        return res.status(404).send("Thread not found");
-      }
-
-      // Then get all replies in chronological order
-      const replies = await db.query.messages.findMany({
-        where: eq(messages.parentId, messageId),
-        with: {
-          user: true,
-          reactions: {
-            with: {
-              user: true,
-            },
-          },
-        },
-        orderBy: [asc(messages.createdAt)],
-      });
-
-      // Return the thread with parent message first
-      res.json([parentMessage, ...replies]);
+      res.json(threadMessages);
     } catch (error) {
       console.error("Error fetching thread:", error);
       res.status(500).send("Internal server error");
     }
   });
 
-  app.post("/api/messages", async (req, res) => {
+  // Add file upload endpoint
+  app.post("/api/upload", upload.single("file"), async (req, res) => {
     const user = req.user;
     if (!user) return res.status(401).send("Not authenticated");
+    if (!req.file) return res.status(400).send("No file uploaded");
 
-    const { content, channelId, parentId } = req.body;
-
-    // Validate channel ID
-    const channelIdNum = parseInt(channelId);
-    if (isNaN(channelIdNum)) {
-      return res.status(400).send("Invalid channel ID");
-    }
-
-    try {
-      // If this is a thread message, verify parent message exists
-      if (parentId) {
-        const parentMessage = await db.query.messages.findFirst({
-          where: eq(messages.id, parentId),
-        });
-
-        if (!parentMessage) {
-          return res.status(404).send("Parent message not found");
-        }
-      }
-
-      const [newMessage] = await db
-        .insert(messages)
-        .values({
-          content,
-          channelId: channelIdNum,
-          parentId: parentId ? parseInt(parentId) : null,
-          userId: user.id,
-        })
-        .returning();
-
-      // Fetch complete message with user and reactions
-      const completeMessage = await db.query.messages.findFirst({
-        where: eq(messages.id, newMessage.id),
-        with: {
-          user: true,
-          reactions: {
-            with: {
-              user: true,
-            },
-          },
-        },
-      });
-
-      if (!completeMessage) {
-        return res.status(500).send("Failed to create message");
-      }
-
-      res.json(completeMessage);
-    } catch (error) {
-      console.error("Error creating message:", error);
-      res.status(500).send("Internal server error");
-    }
-  });
-
-  app.post("/api/messages/:messageId/reactions", async (req, res) => {
-    const user = req.user;
-    if (!user) return res.status(401).send("Not authenticated");
-
-    const messageId = parseInt(req.params.messageId);
-    if (isNaN(messageId)) {
-      return res.status(400).send("Invalid message ID");
-    }
-
-    const { emoji } = req.body;
-    const [reaction] = await db
-      .insert(reactions)
-      .values({
-        emoji,
-        messageId,
-        userId: user.id,
-      })
-      .returning();
-
-    const [completeReaction] = await db.query.reactions.findMany({
-      where: eq(reactions.id, reaction.id),
-      with: {
-        user: true,
-      },
-      limit: 1,
-    });
-
-    if (!completeReaction) {
-      return res.status(500).send("Failed to create reaction");
-    }
-
-    res.json(completeReaction);
-  });
-
-  app.delete(
-    "/api/messages/:messageId/reactions/:reactionId",
-    async (req, res) => {
-      const user = req.user;
-      if (!user) return res.status(401).send("Not authenticated");
-
-      const messageId = parseInt(req.params.messageId);
-      const reactionId = parseInt(req.params.reactionId);
-
-      if (isNaN(messageId) || isNaN(reactionId)) {
-        return res.status(400).send("Invalid message or reaction ID");
-      }
-
-      try {
-        const [message] = await db
-          .select({
-            message: messages,
-            channel: channels,
-            workspace: workspaces,
-          })
-          .from(messages)
-          .leftJoin(channels, eq(messages.channelId, channels.id))
-          .leftJoin(workspaces, eq(channels.workspaceId, workspaces.id))
-          .where(eq(messages.id, messageId))
-          .limit(1);
-
-        if (!message?.workspace) {
-          return res.status(404).send("Message or workspace not found");
-        }
-
-        // Verify workspace membership
-        const [workspaceMember] = await db
-          .select()
-          .from(workspaceMembers)
-          .where(
-            and(
-              eq(workspaceMembers.workspaceId, message.workspace.id),
-              eq(workspaceMembers.userId, user.id),
-            ),
-          )
-          .limit(1);
-
-        if (!workspaceMember) {
-          return res.status(403).send("Not a member of this workspace");
-        }
-
-        await db
-          .delete(reactions)
-          .where(
-            and(eq(reactions.id, reactionId), eq(reactions.userId, user.id)),
-          );
-
-        res.status(204).send();
-      } catch (error) {
-        console.error("Error deleting reaction:", error);
-        res.status(500).send("Internal server error");
-      }
-    },
-  );
-  // Update user's current workspace
-  app.post("/api/user/workspace", async (req, res) => {
-    const user = req.user;
-    if (!user) return res.status(401).send("Not authenticated");
-
-    const workspaceId = parseInt(req.body.workspaceId);
-    if (!workspaceId || isNaN(workspaceId)) {
-      return res.status(400).send("Valid workspace ID is required");
-    }
-
-    try {
-      // Verify workspace membership
-      const [member] = await db
-        .select()
-        .from(workspaceMembers)
-        .where(
-          and(
-            eq(workspaceMembers.userId, user.id),
-            eq(workspaceMembers.workspaceId, workspaceId)
-          )
-        )
-        .limit(1);
-
-      if (!member) {
-        return res.status(403).send("Not a member of this workspace");
-      }
-
-      // Update the session with new workspace ID
-      if (req.user) {
-        req.user.workspaceId = workspaceId;
-      }
-
-      return res.json({
-        message: "Workspace updated successfully",
-        user: {
-          id: user.id,
-          username: user.username,
-          workspaceId
-        }
-      });
-    } catch (error) {
-      console.error("Error updating workspace:", error);
-      res.status(500).send("Internal server error");
-    }
+    const fileUrl = `/uploads/${req.file.filename}`;
+    res.json({ url: fileUrl, name: req.file.originalname });
   });
 
   return httpServer;
