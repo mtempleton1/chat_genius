@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-
+import { User as UserIcon } from "lucide-react";
 import { useWebSocket } from "@/hooks/use-websocket";
 import { useUser } from "@/hooks/use-user";
 import {
@@ -8,7 +8,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Avatar, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import type { User } from "@db/schema";
 
 type UserPresenceProps = {
@@ -32,7 +32,10 @@ export default function UserPresence({ user }: UserPresenceProps) {
       <DropdownMenuTrigger className="focus:outline-none">
         <div className="flex items-center gap-2">
           <Avatar>
-            <AvatarImage src={user.avatar || ""} />
+            <AvatarImage src={user.avatar || ""} alt={user.username} />
+            <AvatarFallback>
+              <UserIcon className="h-6 w-6" />
+            </AvatarFallback>
           </Avatar>
           <div className="text-sm">
             <div className="font-medium">{user.username}</div>

@@ -20,6 +20,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import PreferencesDialog from "@/components/settings/PreferencesDialog";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 
 type WorkspaceSidebarProps = {
   activeView: string;
@@ -102,9 +103,9 @@ export default function WorkspaceSidebar({
               className="w-11 h-11 rounded-lg hover:bg-sidebar-accent hover:text-sidebar-accent-foreground relative"
             >
               <Avatar>
-                <AvatarImage src={user?.avatar || ''} alt={user.username} />
+                <AvatarImage src={user?.avatar || ""} alt={user?.username} />
                 <AvatarFallback>
-                  <UserIcon className="h-5 w-5" />
+                  <UserIcon className="h-6 w-6" />
                 </AvatarFallback>
               </Avatar>
               {user?.status && (
@@ -118,7 +119,20 @@ export default function WorkspaceSidebar({
               {user ? (
                 <div className="flex items-start gap-3">
                   <div className="h-12 w-12 rounded-full bg-sidebar-accent flex items-center justify-center overflow-hidden">
-                    {user.avatar ? (
+                    <Avatar>
+                      <AvatarImage
+                        src={user?.avatar || ""}
+                        alt={user?.username}
+                      />
+                      <AvatarFallback>
+                        <UserIcon className="h-6 w-6" />
+                      </AvatarFallback>
+                      {user?.status && (
+                        <div className="absolute bottom-1 right-1 w-2 h-2 bg-green-500 rounded-full" />
+                      )}
+                    </Avatar>
+
+                    {/* {user.avatar ? (
                       <img
                         src={user.avatar}
                         alt={user.username}
@@ -126,7 +140,7 @@ export default function WorkspaceSidebar({
                       />
                     ) : (
                       <UserCircle className="h-8 w-8" />
-                    )}
+                    )} */}
                   </div>
                   <div className="flex-1">
                     <h4 className="font-bold text-base">{user.username}</h4>
