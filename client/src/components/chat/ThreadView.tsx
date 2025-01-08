@@ -9,6 +9,7 @@ import MessageInput from "./MessageInput";
 import FileUpload from "./FileUpload";
 import type { Message, User, Reaction } from "@db/schema";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { ConsoleLogWriter } from "drizzle-orm";
 
 type ThreadViewProps = {
   messageId: number;
@@ -23,12 +24,11 @@ type ThreadMessage = Message & {
 
 export default function ThreadView({ messageId, onClose }: ThreadViewProps) {
   const { messages, isLoading, sendMessage } = useMessages(messageId, true);
+  const queryClient = useQueryClient(); 
   const { addMessageHandler, sendMessage: sendWebSocketMessage } = useWebSocket();
-  const queryClient = useQueryClient();
   const handlerRef = useRef<(() => void) | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll when new messages arrive
   useEffect(() => {
     const scrollElement = scrollRef.current;
     if (scrollElement) {
@@ -36,11 +36,9 @@ export default function ThreadView({ messageId, onClose }: ThreadViewProps) {
     }
   }, [messages]);
 
-  // Set up WebSocket handler for thread messages
   useEffect(() => {
     console.log(`Setting up thread message handler for messageId: ${messageId}`);
 
-    // Remove existing handler if any
     if (handlerRef.current) {
       handlerRef.current();
       handlerRef.current = null;
@@ -66,6 +64,7 @@ export default function ThreadView({ messageId, onClose }: ThreadViewProps) {
                 user: msg.user,
                 reactions: [],
                 attachments: msg.attachments || null,
+                directMessageId: null
               };
 
               console.log("Updating thread messages:", {
@@ -92,7 +91,6 @@ export default function ThreadView({ messageId, onClose }: ThreadViewProps) {
       }
     }, `thread-${messageId}`);
 
-    // Store cleanup function
     handlerRef.current = cleanup;
 
     return () => {
@@ -136,6 +134,10 @@ export default function ThreadView({ messageId, onClose }: ThreadViewProps) {
     }
   };
 
+  if (!messageId) {
+    return null;
+  }
+
   if (isLoading) {
     return (
       <div className="h-full flex flex-col border-l">
@@ -153,7 +155,23 @@ export default function ThreadView({ messageId, onClose }: ThreadViewProps) {
   }
 
   const parentMessage = messages?.[0] as ThreadMessage;
-  if (!parentMessage) return null;
+  console.log("Parent message");
+  console.log(parentMessage);
+  if (!parentMessage) {
+    return (
+      <div className="h-full flex flex-col border-l">
+        <div className="flex items-center justify-between p-4 border-b">
+          <h3 className="font-semibold">Thread</h3>
+          <Button variant="ghost" size="icon" onClick={onClose}>
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+        <div className="flex-1 flex items-center justify-center text-muted-foreground">
+          Thread not found
+        </div>
+      </div>
+    );
+  }
 
   const replies = messages?.slice(1) as ThreadMessage[];
 
@@ -192,7 +210,11 @@ type ThreadMessageProps = {
 
 function ThreadMessage({ message, isParent }: ThreadMessageProps) {
   if (!message.user) return null;
-
+  console.log("thread view")
+  console.log(message);
+  console.log(message.user);
+  console.log(message.createdAt);
+  console.log(message.content);
   return (
     <div className={`p-4 ${isParent ? "bg-accent rounded-lg" : ""}`}>
       <div className="flex items-center gap-2">

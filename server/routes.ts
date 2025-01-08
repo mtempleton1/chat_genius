@@ -381,19 +381,21 @@ export function registerRoutes(app: Express): Server {
 
     try {
       // First get the parent message and its channel with proper typing
-      const [message] = await db
+      const [parentMessageData] = await db
         .select({
           message: messages,
           channel: channels,
           workspace: workspaces,
+          user: users,
         })
         .from(messages)
         .leftJoin(channels, eq(messages.channelId, channels.id))
         .leftJoin(workspaces, eq(channels.workspaceId, workspaces.id))
+        .leftJoin(users, eq(messages.userId, users.id))
         .where(eq(messages.id, messageId))
         .limit(1);
 
-      if (!message || !message.workspace) {
+      if (!parentMessageData || !parentMessageData.workspace) {
         return res.status(404).json({ error: "Message or workspace not found" });
       }
 
@@ -403,7 +405,7 @@ export function registerRoutes(app: Express): Server {
         .from(workspaceMembers)
         .where(
           and(
-            eq(workspaceMembers.workspaceId, message.workspace.id),
+            eq(workspaceMembers.workspaceId, parentMessageData.workspace.id),
             eq(workspaceMembers.userId, user.id),
           ),
         )
@@ -413,14 +415,30 @@ export function registerRoutes(app: Express): Server {
         return res.status(403).json({ error: "Not a member of this workspace" });
       }
 
-      // Get the thread messages
+      // Get the thread messages with user data
       const threadMessages = await db
-        .select()
+        .select({
+          message: messages,
+          user: users,
+        })
         .from(messages)
+        .leftJoin(users, eq(messages.userId, users.id))
         .where(eq(messages.parentId, messageId))
         .orderBy(asc(messages.createdAt));
 
-      res.json(threadMessages);
+      // Flatten the data structure to match what ThreadView expects
+      const allMessages = [
+        {
+          ...parentMessageData.message,
+          user: parentMessageData.user,
+        },
+        ...threadMessages.map(({ message, user }) => ({
+          ...message,
+          user,
+        })),
+      ];
+
+      res.json(allMessages);
     } catch (error) {
       console.error("Error fetching thread:", error);
       res.status(500).json({ error: "Internal server error" });

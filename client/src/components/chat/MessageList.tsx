@@ -233,7 +233,11 @@ function MessageItem({ message, onThreadSelect, onReactionAdd }: MessageItemProp
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => onThreadSelect(message.id)}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onThreadSelect(message.id);
+            }}
           >
             <MessageSquare className="h-4 w-4 mr-1" />
             Reply

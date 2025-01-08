@@ -10,10 +10,16 @@ export function useMessages(
     ? [`/api/messages/${messageIdOrChannelId}/thread`]
     : [`/api/channels/${messageIdOrChannelId}/messages`];
 
+  console.log("Query key");
+  console.log(queryKey);
+
   const { data: messages, isLoading } = useQuery<Message[]>({
     queryKey,
     enabled: messageIdOrChannelId !== null && messageIdOrChannelId > 0,
   });
+
+  console.log("Messages");
+  console.log(messages);
 
   const sendMessage = useMutation({
     mutationFn: async ({
