@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { X } from "lucide-react";
 import MessageInput from "./MessageInput";
 import FileUpload from "./FileUpload";
-import type { Message } from "@db/schema";
+import type { Message, User, Reaction } from "@db/schema";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 
 type ThreadViewProps = {
@@ -16,21 +16,10 @@ type ThreadViewProps = {
   directMessageId?: number | null;
 };
 
-type ThreadMessage = {
-  id: number;
-  content: string;
-  createdAt: Date | null;
-  updatedAt: Date | null;
-  userId: number | null;
-  channelId: number | null;
-  directMessageId: number | null;
-  parentId: number | null;
-  attachments: Array<{ url: string; name: string }> | null;
-  user?: {
-    id: number;
-    username: string;
-    avatar?: string | null;
-  };
+type ThreadMessage = Message & {
+  user?: User;
+  reactions?: Reaction[];
+  attachments?: Array<{ url: string; name: string }> | null;
 };
 
 export default function ThreadView({ messageId, onClose, directMessageId }: ThreadViewProps) {
@@ -40,7 +29,6 @@ export default function ThreadView({ messageId, onClose, directMessageId }: Thre
   const handlerRef = useRef<(() => void) | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll when new messages arrive
   useEffect(() => {
     const scrollElement = scrollRef.current;
     if (scrollElement) {
@@ -48,60 +36,58 @@ export default function ThreadView({ messageId, onClose, directMessageId }: Thre
     }
   }, [messages]);
 
-  // Set up WebSocket message handler for thread updates
   useEffect(() => {
+    console.log(`Setting up thread message handler for messageId: ${messageId}`);
+
     if (handlerRef.current) {
       handlerRef.current();
       handlerRef.current = null;
     }
 
     const cleanup = addMessageHandler((msg) => {
-      if (msg.type === "thread_message" && msg.parentId === messageId) {
-        queryClient.setQueryData<ThreadMessage[]>(
-          [`/api/messages/${messageId}/thread`],
-          (oldMessages = []) => {
-            const newMessage: ThreadMessage = {
-              id: msg.messageId,
-              content: msg.content,
-              userId: msg.userId,
-              channelId: msg.channelId,
-              directMessageId: msg.directMessageId,
-              parentId: msg.parentId,
-              createdAt: msg.createdAt || new Date(),
-              updatedAt: msg.createdAt || new Date(),
-              attachments: msg.attachments || null,
-              user: msg.user
-            };
+      try {
+        // Only handle thread messages for this specific thread
+        if (msg.type === "thread_message" && msg.parentId === messageId) {
+          console.log("ThreadView received thread message:", msg);
 
-            if (!oldMessages?.some((m) => m.id === newMessage.id)) {
-              return [...oldMessages, newMessage].sort(
+          queryClient.setQueryData<ThreadMessage[]>(
+            [`/api/messages/${messageId}/thread`],
+            (oldMessages = []) => {
+              const newMessage: ThreadMessage = {
+                id: msg.messageId,
+                content: msg.content,
+                userId: msg.userId,
+                channelId: msg.channelId,
+                directMessageId: msg.directMessageId,
+                parentId: msg.parentId,
+                createdAt: msg.createdAt || new Date(),
+                updatedAt: msg.createdAt || new Date(),
+                user: msg.user,
+                reactions: [],
+                attachments: msg.attachments || null,
+              };
+
+              console.log("Updating thread messages:", {
+                oldMessages,
+                newMessage,
+              });
+
+              // Check if message already exists
+              if (oldMessages?.some((m) => m.id === newMessage.id)) {
+                return oldMessages;
+              }
+
+              // Add new message and sort by creation time
+              return [...(oldMessages || []), newMessage].sort(
                 (a, b) =>
                   new Date(a.createdAt!).getTime() -
                   new Date(b.createdAt!).getTime(),
               );
-            }
-
-            return oldMessages;
-          },
-        );
-
-        // Update reply count in parent message list
-        const queryKey = directMessageId
-          ? [`/api/workspaces/${msg.channelId}/direct-messages/${directMessageId}`]
-          : [`/api/channels/${msg.channelId}/messages`];
-
-        queryClient.setQueryData<any[]>(queryKey, (oldData) => {
-          if (!oldData) return oldData;
-          return oldData.map((item) => {
-            if (item.message?.id === messageId || item.id === messageId) {
-              const currentReplyCount = (item.message?.replyCount || item.replyCount || 0) + 1;
-              return item.message
-                ? { ...item, message: { ...item.message, replyCount: currentReplyCount } }
-                : { ...item, replyCount: currentReplyCount };
-            }
-            return item;
-          });
-        });
+            },
+          );
+        }
+      } catch (error) {
+        console.error("Error handling thread message:", error);
       }
     }, `thread-${messageId}`);
 
@@ -109,22 +95,25 @@ export default function ThreadView({ messageId, onClose, directMessageId }: Thre
 
     return () => {
       if (handlerRef.current) {
+        console.log("Cleaning up thread message handler for messageId:", messageId);
         handlerRef.current();
         handlerRef.current = null;
       }
     };
-  }, [messageId, queryClient, addMessageHandler, directMessageId]);
+  }, [messageId, queryClient, addMessageHandler]);
 
   const handleSendMessage = async (content: string) => {
-    if (!messageId || !content.trim()) return;
+    if (!messageId) return;
 
     try {
-      const newMessage = await sendMessage({
-        content,
+      const newMessage = await sendMessage({ 
+        content, 
         parentId: messageId,
-        directMessageId,
+        directMessageId // Pass the directMessageId if it exists
       });
+      console.log("Sending thread message:", newMessage);
 
+      // Send both thread_message and regular message updates
       sendWebSocketMessage({
         type: "thread_message",
         channelId: newMessage.channelId,
@@ -137,12 +126,22 @@ export default function ThreadView({ messageId, onClose, directMessageId }: Thre
         attachments: newMessage.attachments,
         createdAt: newMessage.createdAt,
       });
+
+      // message for channel/DM view thread count updates
+      sendWebSocketMessage({
+        type: "message",
+        channelId: newMessage.channelId,
+        directMessageId: newMessage.directMessageId,
+        newMessage,
+      });
     } catch (error) {
       console.error("Error sending thread message:", error);
     }
   };
 
-  if (!messageId) return null;
+  if (!messageId) {
+    return null;
+  }
 
   if (isLoading) {
     return (
@@ -160,7 +159,7 @@ export default function ThreadView({ messageId, onClose, directMessageId }: Thre
     );
   }
 
-  const parentMessage = messages?.[0];
+  const parentMessage = messages?.[0] as ThreadMessage;
   if (!parentMessage) {
     return (
       <div className="h-full flex flex-col border-l">
@@ -177,7 +176,7 @@ export default function ThreadView({ messageId, onClose, directMessageId }: Thre
     );
   }
 
-  const replies = messages?.slice(1) || [];
+  const replies = messages?.slice(1) as ThreadMessage[];
 
   return (
     <div className="h-full flex flex-col border-l">
@@ -191,7 +190,7 @@ export default function ThreadView({ messageId, onClose, directMessageId }: Thre
       <ScrollArea className="flex-1" ref={scrollRef}>
         <div className="p-4 space-y-4">
           <ThreadMessage message={parentMessage} isParent />
-          {replies.map((message) => (
+          {replies?.map((message) => (
             <ThreadMessage key={message.id} message={message} />
           ))}
         </div>
@@ -201,8 +200,8 @@ export default function ThreadView({ messageId, onClose, directMessageId }: Thre
         <MessageInput
           onSendMessage={handleSendMessage}
           fileUploadComponent={
-            <FileUpload
-              channelId={parentMessage.channelId || 0}
+            <FileUpload 
+              channelId={parentMessage.channelId || 0} 
               directMessageId={directMessageId}
             />
           }

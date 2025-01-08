@@ -16,22 +16,13 @@ type MessageListProps = {
   onThreadSelect: (messageId: number) => void;
 };
 
-type ChannelMessage = {
-  id: number;
-  content: string;
-  createdAt: Date | null;
-  updatedAt: Date | null;
-  userId: number | null;
-  channelId: number | null;
-  directMessageId: number | null;
-  parentId: number | null;
-  replyCount: number;
-  attachments: Array<{ url: string; name: string }> | null;
-  user: {
+type ChannelMessage = Message & {
+  user?: {
     id: number;
     username: string;
     avatar?: string | null;
   };
+  attachments?: Array<{ url: string; name: string }> | null;
 };
 
 export default function MessageList({
@@ -42,8 +33,6 @@ export default function MessageList({
   const { messages, isLoading, sendMessage, addReaction } = useMessages(
     channelId ?? 0,
   );
-  console.log("HERE");
-  console.log(messages);
   const { addMessageHandler, sendMessage: sendWebSocketMessage } =
     useWebSocket();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -58,47 +47,72 @@ export default function MessageList({
     }
   }, [messages]);
 
-  // Set up WebSocket message handler
+  // Set up channel message handler
   useEffect(() => {
     if (!channelId) return;
 
+    console.log(`Setting up channel message handler for channel ${channelId}`);
+
     if (!cleanupRef.current) {
       const cleanup = addMessageHandler((msg) => {
-        if (msg.type === "message" && msg.channelId === channelId) {
-          const newMessage = msg.newMessage as ChannelMessage;
-          if (!newMessage) return;
+        try {
+          if (msg.type === "message" && msg.channelId === channelId) {
+            console.log("MessageList received channel message:", msg);
 
-          queryClient.setQueryData<ChannelMessage[]>(
-            [`/api/channels/${channelId}/messages`],
-            (oldMessages = []) => {
-              if (!oldMessages) return [newMessage];
+            const newMessage = msg.newMessage as ChannelMessage;
+            if (!newMessage) {
+              console.log("No message data in WebSocket message");
+              return;
+            }
+            queryClient.setQueryData<ChannelMessage[]>(
+              [`/api/channels/${channelId}/messages`],
+              (oldMessages = []) => {
+                console.log("Updating message cache", {
+                  oldMessages,
+                  newMessage,
+                });
 
-              // Only add top-level messages
-              if (!newMessage.parentId) {
-                return [...oldMessages, { ...newMessage, replyCount: 0 }].sort(
-                  (a, b) =>
-                    new Date(a.createdAt!).getTime() -
-                    new Date(b.createdAt!).getTime(),
+                if (!oldMessages) return [newMessage];
+
+                // Check if message already exists
+                const messageExists = oldMessages.some(
+                  (m) => m.id === newMessage.id,
                 );
-              }
-
-              // Update reply count for parent message
-              return oldMessages.map((msg) => {
-                if (msg.id === newMessage.parentId) {
-                  return { ...msg, replyCount: (msg.replyCount || 0) + 1 };
+                if (messageExists) {
+                  return oldMessages.map((m) =>
+                    m.id === newMessage.id ? { ...m, ...newMessage } : m,
+                  );
                 }
-                return msg;
-              });
-            },
-          );
+
+                // Only add message if it's not a thread reply
+                if (!newMessage.parentId) {
+                  const updatedMessages = [...oldMessages, newMessage];
+                  return updatedMessages.sort(
+                    (a, b) =>
+                      new Date(a.createdAt!).getTime() -
+                      new Date(b.createdAt!).getTime(),
+                  );
+                }
+
+                return oldMessages;
+              },
+            );
+          }
+        } catch (error) {
+          console.error("Error handling channel message:", error);
         }
+        return () => {};
       }, `channel-${channelId}`);
 
-      cleanupRef.current = cleanup;
+      cleanupRef.current = () => cleanup();
     }
 
     return () => {
+      // Only cleanup when unmounting or changing channels
       if (cleanupRef.current) {
+        console.log(
+          `Cleaning up channel message handler for channel ${channelId}`,
+        );
         cleanupRef.current();
         cleanupRef.current = null;
       }
@@ -106,17 +120,19 @@ export default function MessageList({
   }, [channelId, queryClient, addMessageHandler]);
 
   const handleSendMessage = async (content: string) => {
-    if (!channelId || !content.trim()) return;
+    if (!channelId) return;
 
     try {
       const newMessage = await sendMessage({ content });
+      console.log("Sending channel message:", newMessage);
+
       sendWebSocketMessage({
         type: "message",
         channelId,
         newMessage,
       });
     } catch (error) {
-      console.error("Error sending message:", error);
+      console.error("Error sending channel message:", error);
     }
   };
 
@@ -137,8 +153,7 @@ export default function MessageList({
   }
 
   // Filter out thread replies from the main channel view
-  const channelMessages =
-    (messages as ChannelMessage[])?.filter((msg) => !msg.parentId) || [];
+  const channelMessages = messages?.filter((msg) => !msg.parentId) || [];
 
   return (
     <div className="h-full flex flex-col">
@@ -152,7 +167,7 @@ export default function MessageList({
             {channelMessages.map((message) => (
               <MessageItem
                 key={message.id}
-                message={message}
+                message={message as ChannelMessage}
                 onThreadSelect={onThreadSelect}
                 onReactionAdd={(emoji) =>
                   addReaction({ messageId: message.id, emoji })
@@ -228,11 +243,14 @@ function MessageItem({
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => onThreadSelect(message.id)}
-            className="flex items-center gap-1"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onThreadSelect(message.id);
+            }}
           >
-            <MessageSquare className="h-4 w-4" />
-            Reply {message.replyCount > 0 && `(${message.replyCount})`}
+            <MessageSquare className="h-4 w-4 mr-1" />
+            Reply
           </Button>
 
           <Button variant="ghost" size="sm" onClick={() => onReactionAdd("👍")}>
