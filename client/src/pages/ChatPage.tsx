@@ -149,6 +149,7 @@ export default function ChatPage() {
               <DirectMessageChat
                 userId={selectedUserId}
                 username={users.find(u => u.id === selectedUserId)?.username || ''}
+                workspaceId={workspace!.id}
               />
             ) : (
               <MessageList
