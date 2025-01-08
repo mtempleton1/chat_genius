@@ -16,6 +16,8 @@ type DirectMessageChatProps = {
   messages: Array<{
     message: Message & {
       directMessageId?: number | null;
+      parentId?: number | null;
+      replyCount?: number;
     };
     user: {
       id: number;
@@ -33,10 +35,7 @@ export default function DirectMessageChat({
   messages,
   onThreadSelect,
 }: DirectMessageChatProps) {
-  const { isLoading, sendMessage } = useDirectMessages(
-    workspaceId,
-    userId,
-  );
+  const { isLoading, sendMessage } = useDirectMessages(workspaceId, userId);
   const scrollRef = useRef<HTMLDivElement>(null);
   const { user: currentUser } = useUser();
   const { toast } = useToast();
@@ -55,7 +54,6 @@ export default function DirectMessageChat({
     const scrollElement = scrollRef.current;
     if (scrollElement) {
       const { scrollTop, scrollHeight, clientHeight } = scrollElement;
-      // If we're within 100px of the bottom, enable auto-scroll
       shouldScrollRef.current = scrollHeight - (scrollTop + clientHeight) < 100;
     }
   };
@@ -65,7 +63,6 @@ export default function DirectMessageChat({
 
     try {
       await sendMessage(content);
-      // Enable auto-scroll when sending a new message
       shouldScrollRef.current = true;
     } catch (error) {
       console.error("Error sending message:", error);
@@ -76,6 +73,14 @@ export default function DirectMessageChat({
       });
     }
   };
+
+  // Calculate reply counts for direct messages
+  const replyCountMap: Record<number, number> = {};
+  messages.forEach(({ message }) => {
+    if (message.parentId) {
+      replyCountMap[message.parentId] = (replyCountMap[message.parentId] || 0) + 1;
+    }
+  });
 
   return (
     <div className="h-full flex flex-col">
@@ -143,6 +148,15 @@ export default function DirectMessageChat({
                       >
                         <MessageSquare className="h-4 w-4" />
                         Thread
+                        {replyCountMap[msg.message.id] > 0 && (
+                          <span className={`ml-1 px-1.5 py-0.5 rounded-full text-xs ${
+                            msg.message.userId === currentUser?.id
+                              ? "bg-primary-foreground text-primary"
+                              : "bg-secondary-foreground text-secondary"
+                          }`}>
+                            {replyCountMap[msg.message.id]}
+                          </span>
+                        )}
                       </button>
                     </div>
                     {msg.message.attachments && msg.message.attachments.length > 0 && (
@@ -172,8 +186,8 @@ export default function DirectMessageChat({
         <MessageInput
           onSendMessage={handleSendMessage}
           fileUploadComponent={
-            <FileUpload 
-              channelId={0} 
+            <FileUpload
+              channelId={0}
               directMessageId={messages[0]?.message?.directMessageId}
             />
           }

@@ -50,6 +50,7 @@ export default function ThreadView({ messageId, onClose, directMessageId }: Thre
         if (msg.type === "thread_message" && msg.parentId === messageId) {
           console.log("ThreadView received thread message:", msg);
 
+          // Update thread messages
           queryClient.setQueryData<ThreadMessage[]>(
             [`/api/messages/${messageId}/thread`],
             (oldMessages = []) => {
@@ -67,11 +68,6 @@ export default function ThreadView({ messageId, onClose, directMessageId }: Thre
                 attachments: msg.attachments || null,
               };
 
-              console.log("Updating thread messages:", {
-                oldMessages,
-                newMessage,
-              });
-
               // Check if message already exists
               if (oldMessages?.some((m) => m.id === newMessage.id)) {
                 return oldMessages;
@@ -85,6 +81,39 @@ export default function ThreadView({ messageId, onClose, directMessageId }: Thre
               );
             },
           );
+
+          // Update reply count in the parent list
+          if (directMessageId) {
+            // Update direct messages
+            queryClient.setQueryData<any[]>(
+              [`/api/workspaces/${msg.channelId}/direct-messages/${directMessageId}`],
+              (oldData) => {
+                if (!oldData) return oldData;
+                return oldData.map((item) => {
+                  if (item.message?.id === messageId) {
+                    const replyCount = (item.replyCount || 0) + 1;
+                    return { ...item, replyCount };
+                  }
+                  return item;
+                });
+              },
+            );
+          } else if (msg.channelId) {
+            // Update channel messages
+            queryClient.setQueryData<any[]>(
+              [`/api/channels/${msg.channelId}/messages`],
+              (oldData) => {
+                if (!oldData) return oldData;
+                return oldData.map((item) => {
+                  if (item.id === messageId) {
+                    const replyCount = (item.replyCount || 0) + 1;
+                    return { ...item, replyCount };
+                  }
+                  return item;
+                });
+              },
+            );
+          }
         }
       } catch (error) {
         console.error("Error handling thread message:", error);
@@ -100,7 +129,7 @@ export default function ThreadView({ messageId, onClose, directMessageId }: Thre
         handlerRef.current = null;
       }
     };
-  }, [messageId, queryClient, addMessageHandler]);
+  }, [messageId, queryClient, addMessageHandler, directMessageId]);
 
   const handleSendMessage = async (content: string) => {
     if (!messageId) return;
@@ -109,11 +138,11 @@ export default function ThreadView({ messageId, onClose, directMessageId }: Thre
       const newMessage = await sendMessage({ 
         content, 
         parentId: messageId,
-        directMessageId // Pass the directMessageId if it exists
+        directMessageId 
       });
       console.log("Sending thread message:", newMessage);
 
-      // Send both thread_message and regular message updates
+      // Send WebSocket updates
       sendWebSocketMessage({
         type: "thread_message",
         channelId: newMessage.channelId,
@@ -125,14 +154,6 @@ export default function ThreadView({ messageId, onClose, directMessageId }: Thre
         user: newMessage.user,
         attachments: newMessage.attachments,
         createdAt: newMessage.createdAt,
-      });
-
-      // message for channel/DM view thread count updates
-      sendWebSocketMessage({
-        type: "message",
-        channelId: newMessage.channelId,
-        directMessageId: newMessage.directMessageId,
-        newMessage,
       });
     } catch (error) {
       console.error("Error sending thread message:", error);

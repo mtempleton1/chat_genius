@@ -23,6 +23,8 @@ type ChannelMessage = Message & {
     avatar?: string | null;
   };
   attachments?: Array<{ url: string; name: string }> | null;
+  parentId?: number | null;
+  replyCount?: number;
 };
 
 export default function MessageList({
@@ -33,8 +35,7 @@ export default function MessageList({
   const { messages, isLoading, sendMessage, addReaction } = useMessages(
     channelId ?? 0,
   );
-  const { addMessageHandler, sendMessage: sendWebSocketMessage } =
-    useWebSocket();
+  const { addMessageHandler, sendMessage: sendWebSocketMessage } = useWebSocket();
   const scrollRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
   const cleanupRef = useRef<(() => void) | null>(null);
@@ -64,14 +65,10 @@ export default function MessageList({
               console.log("No message data in WebSocket message");
               return;
             }
+
             queryClient.setQueryData<ChannelMessage[]>(
               [`/api/channels/${channelId}/messages`],
               (oldMessages = []) => {
-                console.log("Updating message cache", {
-                  oldMessages,
-                  newMessage,
-                });
-
                 if (!oldMessages) return [newMessage];
 
                 // Check if message already exists
@@ -101,18 +98,14 @@ export default function MessageList({
         } catch (error) {
           console.error("Error handling channel message:", error);
         }
-        return () => {};
       }, `channel-${channelId}`);
 
-      cleanupRef.current = () => cleanup();
+      cleanupRef.current = cleanup;
     }
 
     return () => {
-      // Only cleanup when unmounting or changing channels
       if (cleanupRef.current) {
-        console.log(
-          `Cleaning up channel message handler for channel ${channelId}`,
-        );
+        console.log(`Cleaning up channel message handler for channel ${channelId}`);
         cleanupRef.current();
         cleanupRef.current = null;
       }
@@ -155,6 +148,14 @@ export default function MessageList({
   // Filter out thread replies from the main channel view
   const channelMessages = messages?.filter((msg) => !msg.parentId) || [];
 
+  // Calculate reply counts for each top-level message
+  const replyCountMap: Record<number, number> = {};
+  messages?.forEach((msg) => {
+    if (msg.parentId) {
+      replyCountMap[msg.parentId] = (replyCountMap[msg.parentId] || 0) + 1;
+    }
+  });
+
   return (
     <div className="h-full flex flex-col">
       <div className="border-b px-4 py-2">
@@ -172,6 +173,7 @@ export default function MessageList({
                 onReactionAdd={(emoji) =>
                   addReaction({ messageId: message.id, emoji })
                 }
+                replyCount={replyCountMap[message.id] || 0}
               />
             ))}
           </div>
@@ -192,12 +194,14 @@ type MessageItemProps = {
   message: ChannelMessage;
   onThreadSelect: (messageId: number) => void;
   onReactionAdd: (emoji: string) => void;
+  replyCount: number;
 };
 
 function MessageItem({
   message,
   onThreadSelect,
   onReactionAdd,
+  replyCount,
 }: MessageItemProps) {
   if (!message.user) return null;
 
@@ -248,9 +252,15 @@ function MessageItem({
               e.stopPropagation();
               onThreadSelect(message.id);
             }}
+            className="flex items-center gap-1"
           >
-            <MessageSquare className="h-4 w-4 mr-1" />
+            <MessageSquare className="h-4 w-4" />
             Reply
+            {replyCount > 0 && (
+              <span className="ml-1 text-xs bg-secondary px-1.5 py-0.5 rounded-full">
+                {replyCount}
+              </span>
+            )}
           </Button>
 
           <Button variant="ghost" size="sm" onClick={() => onReactionAdd("👍")}>
