@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { User } from "lucide-react";
 import { useWebSocket } from "@/hooks/use-websocket";
 import { useUser } from "@/hooks/use-user";
 import {
