@@ -1,14 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { Avatar } from "@/components/ui/avatar";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { MessageSquare } from "lucide-react";
 
-type User = {
-  id: number;
+type WorkspaceUser = {
   username: string;
-  avatarUrl?: string;
-  status?: 'online' | 'offline' | 'away';
+  id: number;
 };
 
 type DirectMessagesListProps = {
@@ -22,9 +19,7 @@ export default function DirectMessagesList({
   onSelectUser,
   workspaceId 
 }: DirectMessagesListProps) {
-  console.log('DirectMessagesList rendered with workspaceId:', workspaceId);
-
-  const { data: users, isLoading, error } = useQuery<{ username: string; id: number }[]>({
+  const { data: users, isLoading, error } = useQuery<WorkspaceUser[]>({
     queryKey: [`/api/workspaces/${workspaceId}/users`],
     enabled: !!workspaceId,
   });
@@ -65,7 +60,7 @@ export default function DirectMessagesList({
         )}
         {error && (
           <div className="px-2 py-1 text-sm text-destructive">
-            Error loading users
+            Error loading users: {error instanceof Error ? error.message : 'Unknown error'}
           </div>
         )}
         {!isLoading && !error && displayedUsers.length === 0 && (
