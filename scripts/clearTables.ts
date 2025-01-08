@@ -8,7 +8,8 @@ import {
   workspaceMembers,
   workspaces,
   organizations,
-  users
+  users,
+  directMessages
 } from "../db/schema";
 
 async function clearTables() {
@@ -27,6 +28,9 @@ async function clearTables() {
     
     console.log("Clearing channels...");
     await db.delete(channels);
+    
+    console.log("Clearing direct messages...");
+    await db.delete(directMessages);
     
     console.log("Clearing workspace members...");
     await db.delete(workspaceMembers);
