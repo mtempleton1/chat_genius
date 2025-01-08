@@ -13,7 +13,7 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 type ThreadViewProps = {
   messageId: number;
   onClose: () => void;
-  directMessageId?: number | null; // Add this prop to support direct messages
+  directMessageId?: number | null;
 };
 
 type ThreadMessage = Message & {
@@ -24,7 +24,7 @@ type ThreadMessage = Message & {
 
 export default function ThreadView({ messageId, onClose, directMessageId }: ThreadViewProps) {
   const { messages, isLoading, sendMessage } = useMessages(messageId, true);
-  const queryClient = useQueryClient(); 
+  const queryClient = useQueryClient();
   const { addMessageHandler, sendMessage: sendWebSocketMessage } = useWebSocket();
   const handlerRef = useRef<(() => void) | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -58,7 +58,7 @@ export default function ThreadView({ messageId, onClose, directMessageId }: Thre
                 content: msg.content,
                 userId: msg.userId,
                 channelId: msg.channelId,
-                directMessageId: msg.directMessageId, // Add support for directMessageId
+                directMessageId: msg.directMessageId,
                 parentId: msg.parentId,
                 createdAt: msg.createdAt || new Date(),
                 updatedAt: msg.createdAt || new Date(),
@@ -114,11 +114,10 @@ export default function ThreadView({ messageId, onClose, directMessageId }: Thre
       console.log("Sending thread message:", newMessage);
 
       // Send both thread_message and regular message updates
-      // thread_message for thread view updates
       sendWebSocketMessage({
         type: "thread_message",
         channelId: newMessage.channelId,
-        directMessageId: newMessage.directMessageId, // Add directMessageId to the WebSocket message
+        directMessageId: newMessage.directMessageId,
         messageId: newMessage.id,
         parentId: messageId,
         content: newMessage.content,
@@ -132,7 +131,7 @@ export default function ThreadView({ messageId, onClose, directMessageId }: Thre
       sendWebSocketMessage({
         type: "message",
         channelId: newMessage.channelId,
-        directMessageId: newMessage.directMessageId, // Add directMessageId here as well
+        directMessageId: newMessage.directMessageId,
         newMessage,
       });
     } catch (error) {

@@ -41,34 +41,44 @@ type Workspace = {
   };
 };
 
-type Message = {
+type MessageType = {
   message: {
     id: number;
-    directMessageId?: number | null;
-  }
-}
+    content: string;
+    createdAt: Date | null;
+    userId: number | null;
+    channelId: number | null;
+    directMessageId: number | null;
+    parentId: number | null;
+    attachments: Array<{ url: string; name: string }> | null;
+    updatedAt: Date | null;
+  };
+  user: {
+    id: number;
+    username: string;
+    avatar?: string | null;
+  };
+};
 
 export default function ChatPage() {
   const { user } = useUser();
   const [location, setLocation] = useLocation();
-  const [selectedChannelId, setSelectedChannelId] = useState<number | null>(
-    null,
-  );
+  const [selectedChannelId, setSelectedChannelId] = useState<number | null>(null);
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
   const [selectedThreadId, setSelectedThreadId] = useState<number | null>(null);
   const [threadDirectMessageId, setThreadDirectMessageId] = useState<number | null>(null);
   const [activeView, setActiveView] = useState("home");
+  const [messages, setMessages] = useState<MessageType[] | null>(null);
 
   // Get workspace ID from URL if it exists
   const workspaceId = location.startsWith("/workspace/")
     ? parseInt(location.split("/")[2], 10)
     : null;
 
-  const { data: workspace, isLoading: isLoadingWorkspace } =
-    useQuery<Workspace>({
-      queryKey: [`/api/workspaces/${workspaceId}`],
-      enabled: !!workspaceId && workspaceId > 0,
-    });
+  const { data: workspace, isLoading: isLoadingWorkspace } = useQuery<Workspace>({
+    queryKey: [`/api/workspaces/${workspaceId}`],
+    enabled: !!workspaceId && workspaceId > 0,
+  });
 
   // Query for channels when workspace is selected
   const { data: channels } = useQuery<Channel[]>({
@@ -77,15 +87,11 @@ export default function ChatPage() {
   });
 
   // Query for workspace users
-  const { data: users, isLoading: isLoadingUsers } = useQuery<
-    { username: string; id: number }[]
-  >({
+  const { data: users } = useQuery<{ username: string; id: number }[]>({
     queryKey: [`/api/workspaces/${workspaceId}/users`],
     enabled: !!workspaceId && workspaceId > 0,
   });
 
-  // Mock messages data -  REPLACE THIS WITH YOUR ACTUAL MESSAGE QUERY
-  const [messages, setMessages] = useState<Message[] | null>(null);
   useEffect(() => {
     // Fetch messages based on selectedChannelId or selectedUserId
     const fetchMessages = async () => {
@@ -94,9 +100,9 @@ export default function ChatPage() {
         const response = await fetch(`/api/channels/${selectedChannelId}/messages`);
         const data = await response.json();
         setMessages(data);
-      } else if (selectedUserId) {
+      } else if (selectedUserId && workspaceId) {
         // Fetch messages for direct message
-        const response = await fetch(`/api/users/${selectedUserId}/messages`);
+        const response = await fetch(`/api/workspaces/${workspaceId}/direct-messages/${selectedUserId}`);
         const data = await response.json();
         setMessages(data);
       } else {
@@ -104,8 +110,7 @@ export default function ChatPage() {
       }
     };
     fetchMessages();
-  }, [selectedChannelId, selectedUserId]);
-
+  }, [selectedChannelId, selectedUserId, workspaceId]);
 
   // Reset selections when workspace changes
   useEffect(() => {
@@ -209,7 +214,7 @@ export default function ChatPage() {
                 username={
                   users.find((u) => u.id === selectedUserId)?.username || ""
                 }
-                workspaceId={workspace!.id}
+                workspaceId={workspace.id}
                 messages={messages}
                 onThreadSelect={(messageId) => {
                   const message = messages?.find(m => m.message.id === messageId);

@@ -138,11 +138,7 @@ export default function DirectMessageChat({
                     <p className="mt-1">{msg.message.content}</p>
                     <div className="mt-2 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
-                        onClick={() => {
-                          if (msg.message.directMessageId) {
-                            onThreadSelect(msg.message.id);
-                          }
-                        }}
+                        onClick={() => onThreadSelect(msg.message.id)}
                         className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
                       >
                         <MessageSquare className="h-4 w-4" />

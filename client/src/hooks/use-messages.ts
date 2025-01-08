@@ -44,10 +44,25 @@ export function useMessages(
       return response.json();
     },
     onSuccess: (newMessage) => {
+      // Update the thread or channel messages cache
       queryClient.setQueryData<Message[]>(queryKey, (old) => {
         if (!old) return [newMessage];
         return [...old, newMessage];
       });
+
+      // If this is a thread reply, update both channel and DM message counts
+      if (newMessage.parentId) {
+        if (newMessage.channelId) {
+          queryClient.invalidateQueries({
+            queryKey: [`/api/channels/${newMessage.channelId}/messages`],
+          });
+        }
+        if (newMessage.directMessageId) {
+          queryClient.invalidateQueries({
+            queryKey: [`/api/workspaces/${newMessage.workspaceId}/direct-messages/${newMessage.userId}`],
+          });
+        }
+      }
     },
   });
 
