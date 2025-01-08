@@ -1,7 +1,6 @@
-import { useState } from "react";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import ChannelList from "./ChannelList";
 import DirectMessagesList from "./DirectMessagesList";
-import { ScrollArea } from "@/components/ui/scroll-area";
 
 type ChatSidebarProps = {
   workspaceId: number;
