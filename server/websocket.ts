@@ -175,7 +175,6 @@ export function setupWebSocket(server: HttpServer) {
         .where(eq(channelMembers.channelId, channelId));
 
       const data = JSON.stringify(message);
-      console.log(`Broadcasting to channel ${channelId}:`, message);
 
       for (const { userId } of channelMemberIds) {
         const client = clients.get(userId);

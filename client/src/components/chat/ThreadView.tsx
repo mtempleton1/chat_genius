@@ -28,7 +28,9 @@ export default function ThreadView({ messageId, onClose }: ThreadViewProps) {
   const { addMessageHandler, sendMessage: sendWebSocketMessage } = useWebSocket();
   const handlerRef = useRef<(() => void) | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-
+  console.log("Thread view");
+  console.log(messages);
+  console.log(messageId);
   useEffect(() => {
     const scrollElement = scrollRef.current;
     if (scrollElement) {

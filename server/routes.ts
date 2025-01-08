@@ -451,24 +451,32 @@ export function registerRoutes(app: Express): Server {
   app.get("/api/messages/:messageId/thread", async (req, res) => {
     const user = req.user;
     if (!user) return res.status(401).json({ error: "Not authenticated" });
-
+    
     const messageId = parseInt(req.params.messageId);
     if (isNaN(messageId)) {
       return res.status(400).json({ error: "Invalid message ID" });
     }
 
     try {
-      // First get the parent message and its channel with proper typing
+      // First get the parent message and try to find workspace through both channels and direct messages
       const [parentMessageData] = await db
         .select({
           message: messages,
           channel: channels,
+          directMessage: directMessages,
           workspace: workspaces,
           user: users,
         })
         .from(messages)
         .leftJoin(channels, eq(messages.channelId, channels.id))
-        .leftJoin(workspaces, eq(channels.workspaceId, workspaces.id))
+        .leftJoin(directMessages, eq(messages.directMessageId, directMessages.id))
+        .leftJoin(
+          workspaces,
+          or(
+            eq(channels.workspaceId, workspaces.id),
+            eq(directMessages.workspaceId, workspaces.id)
+          )
+        )
         .leftJoin(users, eq(messages.userId, users.id))
         .where(eq(messages.id, messageId))
         .limit(1);
@@ -477,7 +485,7 @@ export function registerRoutes(app: Express): Server {
         return res.status(404).json({ error: "Message or workspace not found" });
       }
 
-      // Verify workspace membership with proper typing
+      // Verify workspace membership
       const [workspaceMember] = await db
         .select()
         .from(workspaceMembers)
@@ -504,7 +512,7 @@ export function registerRoutes(app: Express): Server {
         .where(eq(messages.parentId, messageId))
         .orderBy(asc(messages.createdAt));
 
-      // Flatten the data structure to match what ThreadView expects
+      // Flatten the data structure
       const allMessages = [
         {
           ...parentMessageData.message,

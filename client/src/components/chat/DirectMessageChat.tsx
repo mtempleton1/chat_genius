@@ -8,7 +8,7 @@ import { useDirectMessages } from "@/hooks/use-direct-messages";
 import { useUser } from "@/hooks/use-user";
 import FileUpload from "./FileUpload";
 import { useToast } from "@/hooks/use-toast";
-import type { Message, User } from "@db/schema";
+import type { Message, Reaction, User } from "@db/schema";
 
 type DirectMessageChatProps = {
   userId: number;
@@ -17,10 +17,20 @@ type DirectMessageChatProps = {
   onThreadSelect: (messageId: number) => void;
 };
 
-type DirectMessageResponse = {
-  message: Message;
-  user: User;
-};
+// type DirectMessageResponse = {
+//   message: Message;
+//   user: User;
+// };
+
+// Add this type to match MessageList's ChannelMessage type
+// type DirectMessageResponse = Message & {
+//   user?: User;
+//   reactions?: Array<{
+//     reaction: Reaction;
+//     user: User;
+//   }>;
+//   attachments?: Array<{ url: string; name: string }> | null;
+// };
 
 export default function DirectMessageChat({
   userId,
@@ -32,6 +42,8 @@ export default function DirectMessageChat({
     workspaceId,
     userId,
   );
+  console.log("MESSSSAGEGGEGEGSS");
+  console.log(messages);
   const scrollRef = useRef<HTMLDivElement>(null);
   const { user: currentUser } = useUser();
   const { toast } = useToast();
@@ -99,7 +111,7 @@ export default function DirectMessageChat({
             </div>
           ) : (
             <div className="space-y-4">
-              {messages.map((msg: DirectMessageResponse) => (
+              {messages.map((msg) => (
                 <div
                   key={msg.message.id}
                   className={`flex gap-2 group ${
@@ -133,11 +145,7 @@ export default function DirectMessageChat({
                     <p className="mt-1">{msg.message.content}</p>
                     <div className="mt-2 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          onThreadSelect(msg.message.id);
-                        }}
+                        onClick={() => onThreadSelect(msg.message.id)}
                         className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
                       >
                         <MessageSquare className="h-4 w-4" />

@@ -185,7 +185,7 @@ export default function ChatPage() {
             )}
           </ResizablePanel>
 
-          {selectedThreadId && !selectedUserId && (
+          {selectedThreadId && (
             <>
               <ResizableHandle />
               <ResizablePanel defaultSize={30}>
