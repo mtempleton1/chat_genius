@@ -1,9 +1,21 @@
-import { Home, MessageCircle, Activity, User, Settings, UserCircle } from "lucide-react";
+import {
+  Home,
+  MessageCircle,
+  Activity,
+  User,
+  Settings,
+  UserCircle,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
 import { useUser } from "@/hooks/use-user";
+import { User as UserIcon } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -14,7 +26,10 @@ type WorkspaceSidebarProps = {
   onViewChange: (view: string) => void;
 };
 
-export default function WorkspaceSidebar({ activeView, onViewChange }: WorkspaceSidebarProps) {
+export default function WorkspaceSidebar({
+  activeView,
+  onViewChange,
+}: WorkspaceSidebarProps) {
   const { user } = useUser();
   const [status, setStatus] = useState(user?.status || "");
   const [showPreferences, setShowPreferences] = useState(false);
@@ -22,32 +37,34 @@ export default function WorkspaceSidebar({ activeView, onViewChange }: Workspace
 
   const updateStatus = useMutation({
     mutationFn: async (newStatus: string) => {
-      const res = await fetch('/api/user/status', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ status: newStatus })
+      const res = await fetch("/api/user/status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ status: newStatus }),
       });
 
       if (!res.ok) {
-        throw new Error('Failed to update status');
+        throw new Error("Failed to update status");
       }
 
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['user'] });
-    }
+      queryClient.invalidateQueries({ queryKey: ["user"] });
+    },
   });
 
   const views = [
-    { id: 'home', icon: Home, label: 'Home' },
-    { id: 'dms', icon: MessageCircle, label: 'Direct Messages' },
-    { id: 'activity', icon: Activity, label: 'Activity' }
+    { id: "home", icon: Home, label: "Home" },
+    { id: "dms", icon: MessageCircle, label: "Direct Messages" },
+    { id: "activity", icon: Activity, label: "Activity" },
   ];
 
-  const handleStatusUpdate = async (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
+  const handleStatusUpdate = async (
+    e: React.KeyboardEvent<HTMLInputElement>,
+  ) => {
+    if (e.key === "Enter") {
       await updateStatus.mutateAsync(e.currentTarget.value);
       setStatus("");
     }
@@ -64,7 +81,8 @@ export default function WorkspaceSidebar({ activeView, onViewChange }: Workspace
             size="icon"
             className={cn(
               "w-11 h-11 rounded-lg",
-              activeView === id && "bg-sidebar-accent text-sidebar-accent-foreground"
+              activeView === id &&
+                "bg-sidebar-accent text-sidebar-accent-foreground",
             )}
             onClick={() => onViewChange(id)}
           >
@@ -134,7 +152,7 @@ export default function WorkspaceSidebar({ activeView, onViewChange }: Workspace
                 <label className="text-xs font-medium text-muted-foreground">
                   Update your status
                 </label>
-                <Input 
+                <Input
                   placeholder="What's on your mind?"
                   className="h-9"
                   value={status}
@@ -166,9 +184,9 @@ export default function WorkspaceSidebar({ activeView, onViewChange }: Workspace
         </Popover>
       </div>
 
-      <PreferencesDialog 
-        open={showPreferences} 
-        onOpenChange={setShowPreferences} 
+      <PreferencesDialog
+        open={showPreferences}
+        onOpenChange={setShowPreferences}
       />
     </div>
   );
