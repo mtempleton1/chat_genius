@@ -12,6 +12,7 @@ import type { Message } from "@db/schema";
 
 type MessageListProps = {
   channelId: number | null;
+  channelName?: string;
   onThreadSelect: (messageId: number) => void;
 };
 
@@ -151,7 +152,7 @@ export default function MessageList({
   return (
     <div className="h-full flex flex-col">
       <div className="border-b px-4 py-2">
-        <h2 className="font-semibold">Channel Messages</h2>
+        <h2 className="font-semibold"># {channelName || 'Channel Messages'}</h2>
       </div>
 
       <div className="flex-1 overflow-hidden" ref={scrollRef}>

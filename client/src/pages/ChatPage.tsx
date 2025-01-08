@@ -139,6 +139,7 @@ export default function ChatPage() {
               <ResizablePanel defaultSize={50}>
                 <MessageList
                   channelId={selectedChannelId}
+                  channelName={channels?.find(c => c.id === selectedChannelId)?.name}
                   onThreadSelect={setSelectedThreadId}
                 />
               </ResizablePanel>
