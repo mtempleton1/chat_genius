@@ -1,3 +1,6 @@
+
+import { Loader2, MessageSquare } from "lucide-react";
+
 import { useEffect, useRef } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar } from "@/components/ui/avatar";
@@ -13,6 +16,7 @@ type DirectMessageChatProps = {
   userId: number;
   username: string;
   workspaceId: number;
+  onThreadSelect?: (messageId: number) => void;
 };
 
 type DirectMessageResponse = {
@@ -113,6 +117,15 @@ export default function DirectMessageChat({ userId, username, workspaceId }: Dir
                       </span>
                     </div>
                     <p className="mt-1">{msg.message.content}</p>
+                    <div className="mt-2 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={() => onThreadSelect?.(msg.message.id)}
+                        className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
+                      >
+                        <MessageSquare className="h-4 w-4" />
+                        Thread
+                      </button>
+                    </div>
                     {msg.message.attachments && msg.message.attachments.length > 0 && (
                       <div className="mt-2 flex gap-2">
                         {msg.message.attachments.map((attachment, index) => (

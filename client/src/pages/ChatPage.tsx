@@ -150,6 +150,7 @@ export default function ChatPage() {
                 userId={selectedUserId}
                 username={users.find(u => u.id === selectedUserId)?.username || ''}
                 workspaceId={workspace!.id}
+                onThreadSelect={setSelectedThreadId}
               />
             ) : (
               <MessageList
