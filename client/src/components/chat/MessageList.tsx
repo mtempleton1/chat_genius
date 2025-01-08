@@ -27,6 +27,7 @@ type ChannelMessage = Message & {
 
 export default function MessageList({
   channelId,
+  channelName,
   onThreadSelect,
 }: MessageListProps) {
   const { messages, isLoading, sendMessage, addReaction } = useMessages(
