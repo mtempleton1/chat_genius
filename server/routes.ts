@@ -518,7 +518,7 @@ export function registerRoutes(app: Express): Server {
           .limit(1),
       ]);
 
-      if (!currentUserMember[0] || !otherUserMember[0]) {
+      if (!currentUserMember || !otherUserMember || !currentUserMember[0] || !otherUserMember[0]) {
         return res.status(403).json({ error: "One or both users are not members of this workspace" });
       }
 
@@ -623,7 +623,7 @@ export function registerRoutes(app: Express): Server {
           .limit(1),
       ]);
 
-      if (!currentUserMember[0] || !otherUserMember[0]) {
+      if (!currentUserMember || !otherUserMember || !currentUserMember[0] || !otherUserMember[0]) {
         return res.status(403).json({ error: "One or both users are not members of this workspace" });
       }
 
