@@ -1,7 +1,11 @@
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@/components/ui/resizable";
 import ChatSidebar from "@/components/chat/ChatSidebar";
 import MessageList from "@/components/chat/MessageList";
 import ThreadView from "@/components/chat/ThreadView";
@@ -40,20 +44,23 @@ type Workspace = {
 export default function ChatPage() {
   const { user } = useUser();
   const [location, setLocation] = useLocation();
-  const [selectedChannelId, setSelectedChannelId] = useState<number | null>(null);
+  const [selectedChannelId, setSelectedChannelId] = useState<number | null>(
+    null,
+  );
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
   const [selectedThreadId, setSelectedThreadId] = useState<number | null>(null);
-  const [activeView, setActiveView] = useState('home');
+  const [activeView, setActiveView] = useState("home");
 
   // Get workspace ID from URL if it exists
-  const workspaceId = location.startsWith('/workspace/') 
-    ? parseInt(location.split('/')[2], 10) 
+  const workspaceId = location.startsWith("/workspace/")
+    ? parseInt(location.split("/")[2], 10)
     : null;
 
-  const { data: workspace, isLoading: isLoadingWorkspace } = useQuery<Workspace>({
-    queryKey: [`/api/workspaces/${workspaceId}`],
-    enabled: !!workspaceId && workspaceId > 0,
-  });
+  const { data: workspace, isLoading: isLoadingWorkspace } =
+    useQuery<Workspace>({
+      queryKey: [`/api/workspaces/${workspaceId}`],
+      enabled: !!workspaceId && workspaceId > 0,
+    });
 
   // Query for channels when workspace is selected
   const { data: channels } = useQuery<Channel[]>({
@@ -62,7 +69,9 @@ export default function ChatPage() {
   });
 
   // Query for workspace users
-  const { data: users, isLoading: isLoadingUsers } = useQuery<{ username: string; id: number }[]>({
+  const { data: users, isLoading: isLoadingUsers } = useQuery<
+    { username: string; id: number }[]
+  >({
     queryKey: [`/api/workspaces/${workspaceId}/users`],
     enabled: !!workspaceId && workspaceId > 0,
   });
@@ -106,15 +115,15 @@ export default function ChatPage() {
             <WorkspaceSelector onSelect={handleWorkspaceSelect} />
           )}
           {user && (
-            <UserPresence 
+            <UserPresence
               user={{
                 id: user.id,
                 username: user.username,
-                status: 'online',
+                status: "online",
                 avatar: null,
                 lastSeen: null,
                 createdAt: null,
-                password: ''
+                password: "",
               }}
             />
           )}
@@ -148,14 +157,18 @@ export default function ChatPage() {
             {selectedUserId && users ? (
               <DirectMessageChat
                 userId={selectedUserId}
-                username={users.find(u => u.id === selectedUserId)?.username || ''}
+                username={
+                  users.find((u) => u.id === selectedUserId)?.username || ""
+                }
                 workspaceId={workspace!.id}
                 onThreadSelect={setSelectedThreadId}
               />
             ) : (
               <MessageList
                 channelId={selectedChannelId}
-                channelName={channels?.find(c => c.id === selectedChannelId)?.name}
+                channelName={
+                  channels?.find((c) => c.id === selectedChannelId)?.name
+                }
                 onThreadSelect={setSelectedThreadId}
               />
             )}
