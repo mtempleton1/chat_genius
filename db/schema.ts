@@ -79,11 +79,30 @@ export const channelMembers = pgTable("channel_members", {
   joinedAt: timestamp("joined_at").defaultNow(),
 });
 
+// Direct Messages table to track conversations between two users in a workspace
+export const directMessages = pgTable("direct_messages", {
+  id: serial("id").primaryKey(),
+  workspaceId: integer("workspace_id")
+    .references(() => workspaces.id)
+    .notNull(),
+  user1Id: integer("user1_id")
+    .references(() => users.id)
+    .notNull(),
+  user2Id: integer("user2_id")
+    .references(() => users.id)
+    .notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Updated messages table to support both channel and direct messages
 export const messages = pgTable("messages", {
   id: serial("id").primaryKey(),
   content: text("content").notNull(),
   userId: integer("user_id").references(() => users.id),
+  // Make channelId optional since message can be in either channel or DM
   channelId: integer("channel_id").references(() => channels.id),
+  // Add directMessageId for DM support
+  directMessageId: integer("direct_message_id").references(() => directMessages.id),
   parentId: integer("parent_id").references(() => messages.id),
   attachments: jsonb("attachments").$type<{ url: string; name: string }[]>(),
   createdAt: timestamp("created_at").defaultNow(),
@@ -130,6 +149,8 @@ export const usersRelations = relations(users, ({ many }) => ({
   messages: many(messages),
   channelMembers: many(channelMembers),
   reactions: many(reactions),
+  directMessagesAsUser1: many(directMessages, { relationName: "user1" }),
+  directMessagesAsUser2: many(directMessages, { relationName: "user2" }),
 }));
 
 export const workspaceMembersRelations = relations(workspaceMembers, ({ one }) => ({
@@ -163,6 +184,10 @@ export const messagesRelations = relations(messages, ({ one, many }) => ({
     fields: [messages.channelId],
     references: [channels.id],
   }),
+  directMessage: one(directMessages, {
+    fields: [messages.directMessageId],
+    references: [directMessages.id],
+  }),
   parent: one(messages, {
     fields: [messages.parentId],
     references: [messages.id],
@@ -182,6 +207,24 @@ export const reactionsRelations = relations(reactions, ({ one }) => ({
   }),
 }));
 
+// Add relations for direct messages
+export const directMessagesRelations = relations(directMessages, ({ one, many }) => ({
+  workspace: one(workspaces, {
+    fields: [directMessages.workspaceId],
+    references: [workspaces.id],
+  }),
+  user1: one(users, {
+    fields: [directMessages.user1Id],
+    references: [users.id],
+  }),
+  user2: one(users, {
+    fields: [directMessages.user2Id],
+    references: [users.id],
+  }),
+  messages: many(messages),
+}));
+
+
 // Schemas
 export const insertChannelSchema = createInsertSchema(channels);
 export const selectChannelSchema = createSelectSchema(channels);
@@ -195,6 +238,10 @@ export const selectUserSchema = createSelectSchema(users);
 export const insertWorkspaceSchema = createInsertSchema(workspaces);
 export const selectWorkspaceSchema = createSelectSchema(workspaces);
 
+// Add schemas for direct messages
+export const insertDirectMessageSchema = createInsertSchema(directMessages);
+export const selectDirectMessageSchema = createSelectSchema(directMessages);
+
 // Types
 export type User = InferModel<typeof users>;
 export type Organization = InferModel<typeof organizations>;
@@ -202,3 +249,5 @@ export type Workspace = InferModel<typeof workspaces>;
 export type Channel = InferModel<typeof channels>;
 export type Message = InferModel<typeof messages>;
 export type Reaction = InferModel<typeof reactions>;
+// Add type for direct messages
+export type DirectMessage = InferModel<typeof directMessages>;

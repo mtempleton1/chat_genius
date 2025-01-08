@@ -11,6 +11,7 @@ import {
   workspaces,
   workspaceMembers,
   users,
+  directMessages,
 } from "@db/schema";
 import { eq, and, asc, or, desc, isNull } from "drizzle-orm";
 import multer from "multer";
@@ -22,8 +23,9 @@ type Workspace = InferModel<typeof workspaces>;
 type WorkspaceMember = InferModel<typeof workspaceMembers>;
 type Message = InferModel<typeof messages>;
 type Channel = InferModel<typeof channels>;
+type DirectMessage = InferModel<typeof directMessages>;
 
-// Configure multer for file uploads
+// Keep existing multer configuration
 const upload = multer({
   storage: multer.diskStorage({
     destination: "uploads/",
@@ -474,6 +476,217 @@ export function registerRoutes(app: Express): Server {
       });
     } catch (error) {
       console.error("Error updating workspace:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Add new direct message endpoints
+  app.get("/api/workspaces/:workspaceId/direct-messages/:userId", async (req, res) => {
+    const user = req.user as User | undefined;
+    if (!user) return res.status(401).json({ error: "Not authenticated" });
+
+    const workspaceId = parseInt(req.params.workspaceId);
+    const otherUserId = parseInt(req.params.userId);
+    const { parentId } = req.query;
+
+    if (isNaN(workspaceId) || isNaN(otherUserId)) {
+      return res.status(400).json({ error: "Invalid workspace or user ID" });
+    }
+
+    try {
+      // Verify workspace membership for both users
+      const [currentUserMember, otherUserMember] = await Promise.all([
+        db
+          .select()
+          .from(workspaceMembers)
+          .where(
+            and(
+              eq(workspaceMembers.workspaceId, workspaceId),
+              eq(workspaceMembers.userId, user.id),
+            ),
+          )
+          .limit(1),
+        db
+          .select()
+          .from(workspaceMembers)
+          .where(
+            and(
+              eq(workspaceMembers.workspaceId, workspaceId),
+              eq(workspaceMembers.userId, otherUserId),
+            ),
+          )
+          .limit(1),
+      ]);
+
+      if (!currentUserMember[0] || !otherUserMember[0]) {
+        return res.status(403).json({ error: "One or both users are not members of this workspace" });
+      }
+
+      // Get or create direct message conversation
+      let conversation = await db
+        .select()
+        .from(directMessages)
+        .where(
+          and(
+            eq(directMessages.workspaceId, workspaceId),
+            or(
+              and(
+                eq(directMessages.user1Id, user.id),
+                eq(directMessages.user2Id, otherUserId),
+              ),
+              and(
+                eq(directMessages.user1Id, otherUserId),
+                eq(directMessages.user2Id, user.id),
+              ),
+            ),
+          ),
+        )
+        .limit(1)
+        .then(rows => rows[0]);
+
+      if (!conversation) {
+        // Create new direct message conversation
+        const inserted = await db
+          .insert(directMessages)
+          .values({
+            workspaceId,
+            user1Id: user.id,
+            user2Id: otherUserId,
+          })
+          .returning();
+        conversation = inserted[0];
+      }
+
+      // Get messages for this direct message conversation
+      const messageResults = await db
+        .select({
+          message: messages,
+          user: users,
+        })
+        .from(messages)
+        .where(
+          and(
+            eq(messages.directMessageId, conversation.id),
+            parentId
+              ? eq(messages.parentId, parseInt(parentId as string))
+              : isNull(messages.parentId),
+          ),
+        )
+        .leftJoin(users, eq(messages.userId, users.id))
+        .orderBy(asc(messages.createdAt));
+
+      res.json(messageResults);
+    } catch (error) {
+      console.error("Error fetching direct messages:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.post("/api/workspaces/:workspaceId/direct-messages/:userId", async (req, res) => {
+    const user = req.user as User | undefined;
+    if (!user) return res.status(401).json({ error: "Not authenticated" });
+
+    const workspaceId = parseInt(req.params.workspaceId);
+    const otherUserId = parseInt(req.params.userId);
+    const { content, parentId } = req.body;
+
+    if (!content) {
+      return res.status(400).json({ error: "Message content is required" });
+    }
+
+    if (isNaN(workspaceId) || isNaN(otherUserId)) {
+      return res.status(400).json({ error: "Invalid workspace or user ID" });
+    }
+
+    try {
+      // Verify workspace membership for both users
+      const [currentUserMember, otherUserMember] = await Promise.all([
+        db
+          .select()
+          .from(workspaceMembers)
+          .where(
+            and(
+              eq(workspaceMembers.workspaceId, workspaceId),
+              eq(workspaceMembers.userId, user.id),
+            ),
+          )
+          .limit(1),
+        db
+          .select()
+          .from(workspaceMembers)
+          .where(
+            and(
+              eq(workspaceMembers.workspaceId, workspaceId),
+              eq(workspaceMembers.userId, otherUserId),
+            ),
+          )
+          .limit(1),
+      ]);
+
+      if (!currentUserMember[0] || !otherUserMember[0]) {
+        return res.status(403).json({ error: "One or both users are not members of this workspace" });
+      }
+
+      // Get or create direct message conversation
+      let conversation = await db
+        .select()
+        .from(directMessages)
+        .where(
+          and(
+            eq(directMessages.workspaceId, workspaceId),
+            or(
+              and(
+                eq(directMessages.user1Id, user.id),
+                eq(directMessages.user2Id, otherUserId),
+              ),
+              and(
+                eq(directMessages.user1Id, otherUserId),
+                eq(directMessages.user2Id, user.id),
+              ),
+            ),
+          ),
+        )
+        .limit(1)
+        .then(rows => rows[0]);
+
+      if (!conversation) {
+        // Create new direct message conversation
+        const inserted = await db
+          .insert(directMessages)
+          .values({
+            workspaceId,
+            user1Id: user.id,
+            user2Id: otherUserId,
+          })
+          .returning();
+        conversation = inserted[0];
+      }
+
+      // Create the message
+      const [newMessage] = await db
+        .insert(messages)
+        .values({
+          content,
+          userId: user.id,
+          directMessageId: conversation.id,
+          parentId: parentId ? parseInt(parentId) : null,
+        })
+        .returning();
+
+      // Fetch the created message with user details
+      const [messageWithUser] = await db
+        .select({
+          message: messages,
+          user: users,
+        })
+        .from(messages)
+        .where(eq(messages.id, newMessage.id))
+        .leftJoin(users, eq(messages.userId, users.id))
+        .limit(1);
+
+      res.json(messageWithUser);
+    } catch (error) {
+      console.error("Error creating direct message:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
