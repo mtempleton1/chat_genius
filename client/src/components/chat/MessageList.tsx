@@ -33,7 +33,8 @@ export default function MessageList({
   const { messages, isLoading, sendMessage, addReaction } = useMessages(
     channelId ?? 0,
   );
-  const { addMessageHandler, sendMessage: sendWebSocketMessage } = useWebSocket();
+  const { addMessageHandler, sendMessage: sendWebSocketMessage } =
+    useWebSocket();
   const scrollRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
   const cleanupRef = useRef<(() => void) | null>(null);
@@ -63,7 +64,8 @@ export default function MessageList({
               console.log("No message data in WebSocket message");
               return;
             }
-
+            console.log("MESSSSSSSSSSSSSSGAGEGEG");
+            console.log(newMessage);
             queryClient.setQueryData<ChannelMessage[]>(
               [`/api/channels/${channelId}/messages`],
               (oldMessages = []) => {
@@ -75,7 +77,9 @@ export default function MessageList({
                 if (!oldMessages) return [newMessage];
 
                 // Check if message already exists
-                const messageExists = oldMessages.some((m) => m.id === newMessage.id);
+                const messageExists = oldMessages.some(
+                  (m) => m.id === newMessage.id,
+                );
                 if (messageExists) {
                   return oldMessages.map((m) =>
                     m.id === newMessage.id ? { ...m, ...newMessage } : m,
@@ -108,7 +112,9 @@ export default function MessageList({
     return () => {
       // Only cleanup when unmounting or changing channels
       if (cleanupRef.current) {
-        console.log(`Cleaning up channel message handler for channel ${channelId}`);
+        console.log(
+          `Cleaning up channel message handler for channel ${channelId}`,
+        );
         cleanupRef.current();
         cleanupRef.current = null;
       }
@@ -154,7 +160,7 @@ export default function MessageList({
   return (
     <div className="h-full flex flex-col">
       <div className="border-b px-4 py-2">
-        <h2 className="font-semibold"># {channelName || 'Channel Messages'}</h2>
+        <h2 className="font-semibold"># {channelName || "Channel Messages"}</h2>
       </div>
 
       <div className="flex-1 overflow-hidden" ref={scrollRef}>
@@ -190,7 +196,11 @@ type MessageItemProps = {
   onReactionAdd: (emoji: string) => void;
 };
 
-function MessageItem({ message, onThreadSelect, onReactionAdd }: MessageItemProps) {
+function MessageItem({
+  message,
+  onThreadSelect,
+  onReactionAdd,
+}: MessageItemProps) {
   if (!message.user) return null;
 
   return (
@@ -200,7 +210,9 @@ function MessageItem({ message, onThreadSelect, onReactionAdd }: MessageItemProp
           src={message.user.avatar || undefined}
           alt={message.user.username}
         />
-        <AvatarFallback>{message.user.username[0].toUpperCase()}</AvatarFallback>
+        <AvatarFallback>
+          {message.user.username[0].toUpperCase()}
+        </AvatarFallback>
       </Avatar>
 
       <div className="flex-1">
