@@ -52,6 +52,8 @@ export default function WorkspaceSelector({ onSelect }: WorkspaceSelectorProps) 
         ...old,
         workspaceId: data.user.workspaceId,
       }));
+      // Only call onSelect after the workspace is successfully updated
+      onSelect(data.user.workspaceId);
     },
     onError: (error) => {
       toast({
@@ -65,8 +67,8 @@ export default function WorkspaceSelector({ onSelect }: WorkspaceSelectorProps) 
   const handleSelect = async (workspaceId: string) => {
     const id = parseInt(workspaceId, 10);
     try {
+      // Only call setWorkspace mutation, onSelect will be called after success
       await setWorkspace.mutateAsync(id);
-      onSelect(id);
     } catch (error) {
       // Error is handled in mutation
     }
